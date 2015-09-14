@@ -35,31 +35,48 @@
         #error($services.localization.render('core.rename.emptyName'))
         #template("renameStep1.vm")
       #else
-        #set($newDocReference = $services.model.createDocumentReference('', $!{request.newSpaceName}, $!{request.newPageName}))
-        #set($newDocReferenceAsString = $services.model.serialize($newDocReference))
+        #template('refactoring_macros.vm')
+        ## Determine if the new document should be terminal.
+        #isTargetDocumentTerminal($doc.name)
+        #getNestedDocumentReference($request.newWikiName $request.newSpaceName $request.newPageName $NULL $terminal
+          $newDocReference)
+        #set ($newDocReferenceAsString = $services.model.serialize($newDocReference))
         #if($xwiki.exists($newDocReference))
           $response.setStatus(409)
-          #error($services.localization.render('core.rename.alreadyExists', [${escapetool.xml($newDocReferenceAsString)}, $xwiki.getURL($newDocReference)]))
+          #error($services.localization.render('core.rename.alreadyExists', [${escapetool.xml($newDocReferenceAsString)},
+            $xwiki.getURL($newDocReference)]))
           #template("renameStep1.vm")
         #elseif(!$xwiki.hasAccessLevel('edit', $xcontext.user, $newDocReferenceAsString))
           $response.setStatus(403)
-          #error($services.localization.render('core.rename.targetNotWritable', [${escapetool.xml($newDocReferenceAsString)}]))
+          #error($services.localization.render('core.rename.targetNotWritable',
+            [${escapetool.xml($newDocReferenceAsString)}]))
           #template('renameStep1.vm')
         #else
-          #set($backlinks = [])
-          #set($children = [])
-          #foreach($param in $request.parameterNames)
-            #if($param.startsWith("backlink_"))
-              #set($discard = $backlinks.add($services.model.resolveDocument($param.substring(9))))
-            #elseif($param.startsWith("child_"))
-              #set($discard = $children.add($services.model.resolveDocument($param.substring(6))))
-            #end
+          ## We can't rename the children if the new page is terminal.
+          #set ($success = false)
+          #set ($renameRequest = $services.refactoring.createRenameRequest($doc.documentReference, $newDocReference))
+          #set ($deep = $request.deep == 'true' && !$terminal)
+          #set ($discard = $renameRequest.setDeep($deep))
+          #set ($updateLinks = $request.updateLinks == 'true')
+          #set ($discard = $renameRequest.setUpdateLinks($updateLinks))
+          #set ($renameJob = $services.refactoring.rename($renameRequest))
+          #try()
+            #set ($discard = $renameJob.join())
+            #set ($renameJobStatus = $services.job.getJobStatus($renameJob.request.id))
+            #set ($success = $renameJobStatus.log.getLogs('ERROR').isEmpty())
           #end
-          ## Save the old document name so that we can display it in the notice box. After the rename the
-          ## doc points to the new reference!
-          #set ($oldDocReference = $doc.documentReference)
-          $doc.rename($newDocReference, $backlinks, $children)
-          #xwikimessageboxstart($services.localization.render('notice') $services.localization.render('core.rename.success', [${escapetool.xml($oldDocReference.name)}, ${escapetool.xml($doc.name)}, $doc.getURL(), ${escapetool.xml($oldDocReference.getLastSpaceReference().getName())}, ${escapetool.xml($doc.space)}]))
+          #if ($success)
+            #set ($message = $services.localization.render('core.rename.success', [
+              $escapetool.xml($doc.name),
+              $escapetool.xml($newDocReference.name),
+              $xwiki.getURL($newDocReference),
+              $escapetool.xml($doc.space),
+              $escapetool.xml($services.model.serialize($newDocReference.parent))
+            ]))
+          #else
+            #set ($message = $services.localization.render('core.rename.targetNotWritable'))
+          #end
+          #xwikimessageboxstart($services.localization.render('notice') $message)
           #xwikimessageboxend()
         #end
       #end

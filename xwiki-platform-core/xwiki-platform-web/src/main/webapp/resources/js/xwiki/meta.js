@@ -18,18 +18,31 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
 define(['jquery'], function($) {
+  // Note: Starting with XWiki 7.2M3, the returned "document", "xwiki", "space" and "page" variables are deprecated
+  // and it's recommended to use the new "reference" variable, which holds the full String reference of the current
+  // document.
+  // In addition starting with XWiki 7.2M1, the "space" variable now holds the full space reference (i.e. one or
+  // several spaces separated by dots, e.g. "space1.space2").
   var html = $('html');
   // Case 1: meta information are stored in the data- attributes of the <html> tag
   // (since Flamingo)
-  if (html.data('xwiki-document') !== undefined) {
+  if (html.data('xwiki-reference') !== undefined) {
+    var documentReference = XWiki.Model.resolve(html.data('xwiki-reference'), XWiki.EntityType.DOCUMENT);
+    var wikiReference     = documentReference.extractReference(XWiki.EntityType.WIKI);
+    var spaceReference    = documentReference.extractReference(XWiki.EntityType.SPACE);
     return {
-      'document':   html.data('xwiki-document'),
-      'wiki':       html.data('xwiki-wiki'),
-      'space':      html.data('xwiki-space'),
-      'page':       html.data('xwiki-page'),
-      'version':    html.data('xwiki-version'),
-      'restURL':    html.data('xwiki-rest-url'),
-      'form_token': html.data('xwiki-form-token')
+      'documentReference': documentReference,
+       // deprecated, use 'documentReference' instead
+      'document':          XWiki.Model.serialize(documentReference.relativeTo(wikiReference)),
+       // deprecated, use 'documentReference' instead
+      'wiki':              wikiReference.getName(),
+       // deprecated, use 'documentReference' instead
+      'space':             XWiki.Model.serialize(spaceReference.relativeTo(wikiReference)),
+       // deprecated, use 'documentReference' instead
+      'page':              documentReference.getName(),
+      'version':           html.data('xwiki-version'),
+      'restURL':           html.data('xwiki-rest-url'),
+      'form_token':        html.data('xwiki-form-token')
     };
   }
   // Case 2: meta information are stored in deprecated <meta> tags

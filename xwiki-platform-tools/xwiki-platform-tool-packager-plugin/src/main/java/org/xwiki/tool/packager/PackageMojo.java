@@ -202,7 +202,7 @@ public class PackageMojo extends AbstractMojo
 
     /**
      * Indicate of the package mojo is used for tests. Among other things it means it's then possible to skip it using
-     * skipTetsts system property.
+     * skipTests system property.
      *
      * @parameter default-value="true"
      * @since 6.0M2
@@ -427,7 +427,7 @@ public class PackageMojo extends AbstractMojo
             // ordered LinkedHashSet behind the scene)
             List<Artifact> dependenciesFirstArtifacts = new ArrayList<Artifact>(xarArtifacts);
             Collections.reverse(dependenciesFirstArtifacts);
-            
+
             // Import the xars
             for (Artifact xarArtifact : dependenciesFirstArtifacts) {
                 getLog().info("  ... Importing XAR file: " + xarArtifact.getFile());
@@ -616,9 +616,7 @@ public class PackageMojo extends AbstractMojo
     {
         // Get the mandatory jars
         Set<Artifact> artifacts = getMandatoryJarArtifacts();
-        // But also the skins artifacts, that may have JAR dependencies
-        artifacts.addAll(getSkinArtifacts());
-        
+
         // Now resolve mandatory dependencies if they're not explicitly specified
         Set<Artifact> resolvedArtifacts = resolveTransitively(artifacts);
 
@@ -640,7 +638,7 @@ public class PackageMojo extends AbstractMojo
 
     private Set<Artifact> getMandatoryJarArtifacts() throws MojoExecutionException
     {
-        Set<Artifact> mandatoryTopLevelArtifacts = new HashSet<Artifact>();
+        Set<Artifact> mandatoryTopLevelArtifacts = new HashSet<>();
 
         mandatoryTopLevelArtifacts.add(this.repositorySystem.createArtifact("org.xwiki.platform",
             "xwiki-platform-oldcore", getXWikiPlatformVersion(), null, "jar"));
@@ -688,6 +686,15 @@ public class PackageMojo extends AbstractMojo
         mandatoryTopLevelArtifacts.add(this.repositorySystem.createArtifact("org.xwiki.platform",
             "xwiki-platform-resource-servlet", getXWikiPlatformVersion(), null, "jar"));
 
+        // Velocity Scripting for Model Modules is also core (it's used a bit everywhere in VMs, pages, etc).
+        mandatoryTopLevelArtifacts.add(this.repositorySystem.createArtifact("org.xwiki.platform",
+            "xwiki-platform-wiki-script", getXWikiPlatformVersion(), null, "jar"));
+
+        // Copy/Delete/Rename/Move actions are currently in the Refactoring module and for now we consider them as
+        // core actions.
+        mandatoryTopLevelArtifacts.add(this.repositorySystem.createArtifact("org.xwiki.platform",
+            "xwiki-platform-refactoring-default", getXWikiPlatformVersion(), null, "jar"));
+
         // Get the platform's pom.xml to get the versions of some needed externals dependencies, so that we do not
         // hardcode them.
         MavenProject platformPomProject = getPlatformPOMProject();
@@ -710,6 +717,9 @@ public class PackageMojo extends AbstractMojo
         // developer's life easy, we also include the filter module (used for XAR exports).
         mandatoryTopLevelArtifacts.add(this.repositorySystem.createArtifact("org.xwiki.platform",
             "xwiki-platform-filter-instance-oldcore", getXWikiPlatformVersion(), null, "jar"));
+
+        // Also add the skins artifacts, that may have JAR dependencies
+        mandatoryTopLevelArtifacts.addAll(getSkinArtifacts());
 
         return mandatoryTopLevelArtifacts;
     }

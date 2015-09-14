@@ -35,28 +35,33 @@ public class CopyPage extends ViewPage
      */
     private static final String VALUE = "value";
 
+    @FindBy(css = "form#copy .breadcrumb")
+    private WebElement sourceBreadcrumbElement;
+
+    private BreadcrumbElement sourceBreadcrumb;
+
     /**
      * The hidden input containing the space name of the source page.
      */
-    @FindBy(id = "sourceSpaceName")
+    @FindBy(xpath = "//input[@type='hidden' and @name = 'sourceSpaceName']")
     private WebElement sourceSpaceName;
 
     /**
      * The hidden input containing the source page name.
      */
-    @FindBy(id = "sourcePageName")
+    @FindBy(xpath = "//input[@type='hidden' and @name = 'sourcePageName']")
     private WebElement sourcePageName;
 
     /**
-     * The select box containing the list of available spaces.
+     * The text input field to enter the name of the target space.
      */
-    @FindBy(id = "targetSpaceName")
+    @FindBy(xpath = "//input[@name = 'targetSpaceName']")
     private WebElement targetSpaceName;
 
     /**
      * The text input field to enter the name of the target page.
      */
-    @FindBy(id = "targetPageName")
+    @FindBy(xpath = "//input[@name = 'targetPageName']")
     private WebElement targetPageName;
 
     /**
@@ -66,23 +71,38 @@ public class CopyPage extends ViewPage
     private WebElement copyButton;
 
     /**
+     * @return the breadcrumb that specified the location of the source document
+     * @since 7.2M3
+     */
+    public BreadcrumbElement getSourceLocation()
+    {
+        if (this.sourceBreadcrumb == null) {
+            this.sourceBreadcrumb = new BreadcrumbElement(this.sourceBreadcrumbElement);
+        }
+        return this.sourceBreadcrumb;
+    }
+
+    /**
      * @return the name of the space where the source page should be.
      */
-    public String getSourceSpaceName() {
+    public String getSourceSpaceName()
+    {
         return this.sourceSpaceName.getAttribute(VALUE);
     }
 
     /**
      * @return the name of the source page.
      */
-    public String getSourcePageName() {
+    public String getSourcePageName()
+    {
         return this.sourcePageName.getAttribute(VALUE);
     }
 
     /**
      * @return the current name of the space where the page should be copied.
      */
-    public String getTargetSpaceName() {
+    public String getTargetSpaceName()
+    {
         return this.targetSpaceName.getAttribute(VALUE);
     }
 
@@ -100,7 +120,8 @@ public class CopyPage extends ViewPage
     /**
      * @return the current name of the target page.
      */
-    public String getTargetPageName() {
+    public String getTargetPageName()
+    {
         return this.targetPageName.getAttribute(VALUE);
     }
 

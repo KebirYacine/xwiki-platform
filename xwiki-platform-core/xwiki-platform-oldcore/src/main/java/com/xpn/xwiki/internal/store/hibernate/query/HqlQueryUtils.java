@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -72,6 +73,16 @@ public final class HqlQueryUtils
 
     private static final String SPACE_FIELD_HIDDEN = DOCUMENT_FIELD_HIDDEN;
 
+    private static final String FROM_REPLACEMENT = "$1";
+
+    private static final Pattern FROM_DOC = Pattern.compile("com\\.xpn\\.xwiki\\.doc\\.([^ ]+)");
+
+    private static final Pattern FROM_OBJECT = Pattern.compile("com\\.xpn\\.xwiki\\.objects\\.([^ ]+)");
+
+    private static final Pattern FROM_RCS = Pattern.compile("com\\.xpn\\.xwiki\\.doc\\.rcs\\.([^ ]+)");
+
+    private static final Pattern FROM_VERSION = Pattern.compile("com\\.xpn\\.xwiki\\.store\\.migration\\.([^ ]+)");
+
     private static final Map<String, Set<String>> ALLOWED_FIELDS;
 
     static {
@@ -106,15 +117,7 @@ public final class HqlQueryUtils
      */
     public static boolean isShortFormStatement(String statement)
     {
-        boolean isShortStatement = false;
-        String lcStatement = statement.trim().toLowerCase();
-
-        isShortStatement |= lcStatement.startsWith(", ");
-        isShortStatement |= lcStatement.startsWith("from");
-        isShortStatement |= lcStatement.startsWith("where");
-        isShortStatement |= lcStatement.startsWith("order");
-
-        return isShortStatement;
+        return StringUtils.startsWithAny(statement.trim().toLowerCase(), ",", "from", "where", "order");
     }
 
     /**
@@ -126,7 +129,15 @@ public final class HqlQueryUtils
         Statement statement;
         try {
             // TODO: should probably use a more specific Hql parser
-            statement = CCJSqlParserUtil.parse(statementString);
+
+            // FIXME: Workaround https://github.com/JSQLParser/JSqlParser/issues/163 (Support class syntax in HQL query)
+            String cleanedStatement = statementString;
+            cleanedStatement = FROM_DOC.matcher(cleanedStatement).replaceAll(FROM_REPLACEMENT);
+            cleanedStatement = FROM_OBJECT.matcher(cleanedStatement).replaceAll(FROM_REPLACEMENT);
+            cleanedStatement = FROM_RCS.matcher(cleanedStatement).replaceAll(FROM_REPLACEMENT);
+            cleanedStatement = FROM_VERSION.matcher(cleanedStatement).replaceAll(FROM_REPLACEMENT);
+
+            statement = CCJSqlParserUtil.parse(cleanedStatement);
 
             if (statement instanceof Select) {
                 Select select = (Select) statement;
@@ -149,6 +160,7 @@ public final class HqlQueryUtils
             }
         } catch (JSQLParserException e) {
             // We can't parse it so lets say it's not safe
+            e.printStackTrace();
         }
 
         return false;
@@ -208,13 +220,21 @@ public final class HqlQueryUtils
         } else if (expression instanceof Function) {
             Function function = (Function) expression;
 
-            for (Expression parameter : function.getParameters().getExpressions()) {
-                if (!isSelectExpressionAllowed(parameter, tables)) {
-                    return false;
+            if (function.isAllColumns()) {
+                // Validate that allowed table is passed to the method
+                // TODO: add support for more that "count" maybe
+                return function.getName().equals("count") && tables.size() == 1
+                    && isTableAllowed(tables.values().iterator().next());
+            } else {
+                // Validate that allowed columns are used as parameters
+                for (Expression parameter : function.getParameters().getExpressions()) {
+                    if (!isSelectExpressionAllowed(parameter, tables)) {
+                        return false;
+                    }
                 }
-            }
 
-            return true;
+                return true;
+            }
         }
 
         return false;
@@ -228,6 +248,15 @@ public final class HqlQueryUtils
     {
         Set<String> fields = ALLOWED_FIELDS.get(getTableName(column.getTable(), tables));
         return fields != null && fields.contains(column.getColumnName());
+    }
+
+    /**
+     * @param tableName the name of the table
+     * @return true if the table has at least one allowed field
+     */
+    private static boolean isTableAllowed(String tableName)
+    {
+        return ALLOWED_FIELDS.containsKey(tableName);
     }
 
     private static String getTableName(Table table, Map<String, String> tables)

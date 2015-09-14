@@ -138,6 +138,11 @@ public class XWikiLDAPUtils
     private String userSearchFormatString = "({0}={1})";
 
     /**
+     * @see #isResolveSubgroups()
+     */
+    private boolean resolveSubgroups = true;
+
+    /**
      * Create an instance of {@link XWikiLDAPUtils}.
      * 
      * @param connection the XWiki LDAP connection tool.
@@ -225,6 +230,22 @@ public class XWikiLDAPUtils
     public Collection<String> getGroupMemberFields()
     {
         return this.groupMemberFields;
+    }
+
+    /**
+     * @return true if sub groups should be resolved too
+     */
+    public boolean isResolveSubgroups()
+    {
+        return this.resolveSubgroups;
+    }
+
+    /**
+     * @param resolveSubgroups true if sub groups should be resolved too
+     */
+    public void setResolveSubgroups(boolean resolveSubgroups)
+    {
+        this.resolveSubgroups = resolveSubgroups;
     }
 
     /**
@@ -540,6 +561,22 @@ public class XWikiLDAPUtils
         if (LDAPDN.isValid(userOrGroup)) {
             LOGGER.debug("[{}] is a valid DN, lets try to get corresponding entry.", userOrGroup);
 
+            // Stop there if passed used is already a resolved member
+            if (memberMap.containsKey(userOrGroup.toLowerCase())) {
+                LOGGER.debug("[{}] is already resolved", userOrGroup);
+
+                return false;
+            }
+
+            // Stop there if subgroup resolution is disabled
+            if (!subgroups.isEmpty() && !isResolveSubgroups()) {
+                LOGGER.debug("Group members resolve is disabled to add [{}] as group member directly", userOrGroup);
+
+                memberMap.put(userOrGroup.toLowerCase(), userOrGroup);
+
+                return false;
+            }
+
             isGroup = getGroupMembersFromDN(userOrGroup, memberMap, subgroups, context);
         }
 
@@ -560,6 +597,23 @@ public class XWikiLDAPUtils
 
                 if (searchAttributeList != null && !searchAttributeList.isEmpty()) {
                     String dn = searchAttributeList.get(0).value;
+
+                    // Stop there if passed used is already a resolved member
+                    if (memberMap.containsKey(dn.toLowerCase())) {
+                        LOGGER.debug("[{}] is already resolved", dn);
+
+                        return false;
+                    }
+
+                    // Stop there if subgroup resolution is disabled
+                    if (!subgroups.isEmpty() && !isResolveSubgroups()) {
+                        LOGGER.debug("Group members resolve is disabled to add [{}] as group member directly", dn);
+
+                        memberMap.put(dn.toLowerCase(), dn);
+
+                        return false;
+                    }
+
                     isGroup = getGroupMembers(dn, memberMap, subgroups, context);
                 }
             }
@@ -871,11 +925,11 @@ public class XWikiLDAPUtils
             MessageFormat.format(
                 this.userSearchFormatString,
                 new Object[] {XWikiLDAPConnection.escapeLDAPSearchFilter(this.uidAttributeName),
-                XWikiLDAPConnection.escapeLDAPSearchFilter(uid)});
+                    XWikiLDAPConnection.escapeLDAPSearchFilter(uid)});
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Searching for the user in LDAP: user [{}] base [{}] query [{}] uid [{}]", new Object[] {uid,
-            this.baseDN, filter, this.uidAttributeName});
+                this.baseDN, filter, this.uidAttributeName});
         }
 
         return this.connection.searchLDAP(this.baseDN, filter, attributeNameTable, LDAPConnection.SCOPE_SUB);
@@ -909,8 +963,6 @@ public class XWikiLDAPUtils
      * @param context the XWiki context.
      * @throws XWikiException error when updating or creating XWiki user.
      */
-    // TODO this method does a variable re-assignment on userProfile.
-    // This need to be investigated and refactored to avoid this need.
     public void syncUser(XWikiDocument userProfile, List<XWikiLDAPSearchAttribute> searchAttributeListIn,
         String ldapDn, String ldapUid, XWikiContext context) throws XWikiException
     {

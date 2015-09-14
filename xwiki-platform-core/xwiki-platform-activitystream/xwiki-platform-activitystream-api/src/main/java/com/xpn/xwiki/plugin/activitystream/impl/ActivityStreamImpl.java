@@ -23,6 +23,7 @@ import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -74,7 +75,7 @@ import com.xpn.xwiki.web.Utils;
 
 /**
  * Default implementation for {@link ActivityStream}.
- * 
+ *
  * @version $Id$
  */
 @SuppressWarnings("serial")
@@ -99,6 +100,11 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
     private static final String LISTENER_NAME = "activitystream";
 
     /**
+     * Used to query for nested spaces of the specified space.
+     */
+    private static final String NESTED_SPACE_FORMAT = "%s.%%";
+
+    /**
      * The events to match.
      */
     private static final List<Event> LISTENER_EVENTS = new ArrayList<Event>()
@@ -121,7 +127,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
 
     /**
      * Set fields related to the document which fired the event in the given event object.
-     * 
+     *
      * @param event the event to prepare
      * @param doc document which fired the event
      * @param context the XWiki context
@@ -152,7 +158,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
 
     /**
      * Set fields in the given event object.
-     * 
+     *
      * @param event the event to prepare
      * @param doc document which fired the event
      * @param context the XWiki context
@@ -188,7 +194,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
 
     /**
      * Generate event ID for the given ID. Note that this method does not perform the set of the ID in the event object.
-     * 
+     *
      * @param event event to generate the ID for
      * @param context the XWiki context
      * @return the generated ID
@@ -253,7 +259,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
      * in the main wiki, the method will return true. If events are stored in the main wiki, the method retrieves the
      * 'platform.plugin.activitystream.uselocalstore' configuration option. If the option is not found the method
      * returns true (default behavior).
-     * 
+     *
      * @param context the XWiki context
      * @return true if the activity stream is configured to store events in the main wiki, false otherwise
      */
@@ -273,7 +279,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
      * This method determine if events must be store in the main wiki. If the current wiki is the main wiki, this method
      * returns false, otherwise if retrieves the 'platform.plugin.activitystream.usemainstore' configuration option. If
      * the option is not found the method returns true (default behavior).
-     * 
+     *
      * @param context the XWiki context
      * @return true if the activity stream is configured to store events in the main wiki, false otherwise
      */
@@ -608,7 +614,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
      * This method will add a where clause to filter events fired from hidden documents. The clause will not be added to
      * the query if the user has specified that he wish to see hidden documents in his profile. If the clause is added
      * this method will also add a 'where' to the query if it is missing.
-     * 
+     *
      * @param query The query to add the filter to
      */
     private void addHiddenEventsFilter(StringBuffer query)
@@ -626,7 +632,7 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
     /**
      * This method will add the passed optional where clause to the given query if the optional clause is not an empty
      * string nor null. If the clause is added this method will also add a 'where' to the query if it is missing.
-     * 
+     *
      * @param query The query to add the where clause to
      * @param optionalWhereClause The optional where clause to add
      */
@@ -699,35 +705,41 @@ public class ActivityStreamImpl implements ActivityStream, EventListener
     public List<ActivityEvent> getEventsForSpace(String space, boolean filter, int nb, int start, XWikiContext context)
         throws ActivityStreamException
     {
-        return searchEvents("act.space='" + space + "'", filter, nb, start, context);
+        List<Object> parameterValues = Arrays.<Object> asList(space, String.format(NESTED_SPACE_FORMAT, space));
+        return searchEvents("act.space=? OR act.space LIKE ?", filter, false, nb, start, parameterValues, context);
     }
 
     @Override
     public List<ActivityEvent> getEventsForUser(String user, boolean filter, int nb, int start, XWikiContext context)
         throws ActivityStreamException
     {
-        return searchEvents("act.user='" + user + "'", filter, nb, start, context);
+        List<Object> parameterValues = Arrays.<Object> asList(user);
+        return searchEvents("act.user=?", filter, false, nb, start, parameterValues, context);
     }
 
     @Override
     public List<ActivityEvent> getEvents(String stream, boolean filter, int nb, int start, XWikiContext context)
         throws ActivityStreamException
     {
-        return searchEvents("act.stream='" + stream + "'", filter, nb, start, context);
+        List<Object> parameterValues = Arrays.<Object> asList(stream);
+        return searchEvents("act.stream=?", filter, false, nb, start, parameterValues, context);
     }
 
     @Override
     public List<ActivityEvent> getEventsForSpace(String stream, String space, boolean filter, int nb, int start,
         XWikiContext context) throws ActivityStreamException
     {
-        return searchEvents("act.space='" + space + "' and act.stream='" + stream + "'", filter, nb, start, context);
+        List<Object> parameterValues = Arrays.<Object> asList(stream, space, String.format(NESTED_SPACE_FORMAT, space));
+        return searchEvents("act.stream=? AND (act.space=? OR act.space LIKE ?)", filter, false, nb, start,
+            parameterValues, context);
     }
 
     @Override
     public List<ActivityEvent> getEventsForUser(String stream, String user, boolean filter, int nb, int start,
         XWikiContext context) throws ActivityStreamException
     {
-        return searchEvents("act.user='" + user + "' and act.stream='" + stream + "'", filter, nb, start, context);
+        List<Object> parameterValues = Arrays.<Object> asList(stream, user);
+        return searchEvents("act.stream=? AND act.user=?", filter, false, nb, start, parameterValues, context);
     }
 
     @Override

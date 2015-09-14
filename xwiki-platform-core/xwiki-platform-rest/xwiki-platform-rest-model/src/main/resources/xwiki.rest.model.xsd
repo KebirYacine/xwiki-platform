@@ -272,7 +272,45 @@
       </extension>
     </complexContent>
   </complexType>
+  
+  <complexType name="JobProgress">
+    <sequence>
+      <element name="offset" type="double"></element>
+      <element name="currentLevelOffset" type="double"></element>
+    </sequence>
+  </complexType>
+  
+  <complexType name="LogEvent">
+    <sequence>
+      <element name="level" type="string"></element>
+      <element name="date" type="dateTime"></element>
+      <element name="formattedMessage" type="string"></element>
+    </sequence>
+  </complexType>
 
+  <complexType name="Log">
+    <complexContent>
+      <extension base="xwiki:LinkCollection">
+        <sequence>
+          <element name="logEvent" type="xwiki:LogEvent" minOccurs="0" maxOccurs="unbounded"></element>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+  
+  <complexType name="JobStatus">
+    <complexContent>
+      <extension base="xwiki:LinkCollection">
+        <sequence>
+          <element name="id" type="string"></element>
+          <element name="state" type="string"></element>
+          <element name="progress" type="xwiki:JobProgress"></element>
+          <element name="startDate" type="dateTime"></element>
+          <element name="endDate" type="dateTime"></element>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
 
   <!--
   *
@@ -504,4 +542,8 @@
   </complexType>
 
   <element name="syntaxes" type="xwiki:Syntaxes"></element>
+  
+  <element name="jobStatus" type="xwiki:JobStatus"></element>
+
+  <element name="jobLog" type="xwiki:Log"></element>
 </schema>

@@ -240,7 +240,7 @@ Object.extend(XWiki, {
     $(content || 'body').select(".xwikirenderingerror").each(function(error) {
         if(error.next().innerHTML !== "" && error.next().hasClassName("xwikirenderingerrordescription")) {
             error.style.cursor="pointer";
-            error.title = "$services.localization.render('platform.core.rendering.error.readTechnicalInformation')";
+            error.title = "$escapetool.javascript($services.localization.render('platform.core.rendering.error.readTechnicalInformation'))";
             Event.observe(error, "click", function(event){
                    event.element().next().toggleClassName("hidden");
             });
@@ -320,12 +320,12 @@ Object.extend(XWiki, {
                   if (!XWiki.hasRenderer) {
                       editlink = document.createElement("SPAN");
                       editspan.className = editspan.className + " disabled";
-                      editlink.title = "$services.localization.render('platform.core.rendering.noRendererForSectionEdit')";
+                      editlink.title = "$escapetool.javascript($services.localization.render('platform.core.rendering.noRendererForSectionEdit'))";
                   } else {
                       editlink = document.createElement("A");
                       editlink.href = window.docediturl + "?section=" + sectioncount;
                       editlink.style.textDecoration = "none";
-                      editlink.innerHTML = "$services.localization.render('edit')";
+                      editlink.innerHTML = "$escapetool.javascript($services.localization.render('edit'))";
                   }
 
                   editspan.appendChild(editlink);
@@ -380,11 +380,27 @@ Object.extend(XWiki, {
                           if (redirect) {
                             window.location = redirect;
                           } else {
-                            new XWiki.widgets.CreatePagePopup({content: transport.responseText});
+                            // The create action actually loads some JS and CSS. This modal box needs them too, but we
+                            // load them on demand.
+                            // We display an notification while the browser fetch the resources/
+                            var notification = new XWiki.widgets.Notification("$escapetool.javascript($services.localization.render('core.create.popup.loading'))", 'inprogress');
+                            // Add the CSS
+                            var newStyle = new Element('link', {'rel': 'stylesheet', 'type':'text/css', 
+                              'href': '$xwiki.getSkinFile("uicomponents/widgets/select/select.css", true)'});
+                            $(document.head).insert(newStyle);
+                            // Add the JS
+                            require(["$xwiki.getSkinFile('js/xwiki/create.js', true)",
+                                     "$xwiki.getSkinFile('uicomponents/widgets/select/select.js', true)"],
+                                    function($) {
+                                       // We are sure that the JS have been loaded, so we finally display
+                                       // the create popup
+                                       new XWiki.widgets.CreatePagePopup({content: transport.responseText});
+                                       notification.hide();
+                                    });
                           }
                       },
                       onFailure: function() {
-                        new XWiki.widgets.Notification("$services.localization.render('core.create.ajax.error')", 'error', {inactive: true}).show();
+                        new XWiki.widgets.Notification("$escapetool.javascript($services.localization.render('core.create.ajax.error'))", 'error', {inactive: true}).show();
                       }
                   });
                   event.stop();
@@ -1235,19 +1251,68 @@ var browser = new BrowserDetect();
 XWiki.Document = Class.create({
   /**
    * Constructor. All parameters are optional, and default to the current document location.
+   *
+   * Note: Starting with XWiki 7.2M1 the space field is deprecated and holds a space reference (i.e. one or
+   * several spaces separated by dots, e.g. "space1.space2").
+   *
+   * The constructor which takes the 3 arguments is mostly for retro-compatibility. The best practice is to construct a 
+   * new instance with a document reference.
+   * e.g. new XWiki.Document(new XWiki.DocumentReference('xwiki', ['Space1', 'Space2'], 'Page'));
    */
-  initialize : function(page, space, wiki) {
-    this.page = page || XWiki.Document.currentPage;
-    this.space = space || XWiki.Document.currentSpace;
-    this.wiki = wiki || XWiki.Document.currentWiki;
+  initialize : function(pageNameOrReference, space, wiki) {
+    if (typeof pageNameOrReference === 'string' || typeof space === 'string' || typeof wiki === 'string') {
+      this.initializeFromStrings(pageNameOrReference, space, wiki);
+    } else {
+      // The first argument is a document reference (or it is null).
+      // We ignore the other arguments since all the needed information is on the reference
+      this.initializeFromReference(pageNameOrReference);
+    }
   },
+  
+  /**
+   * Initialize the document with a document reference.
+   */
+  initializeFromReference : function(reference) {
+    this.documentReference  = reference || XWiki.Document.currentDocumentReference;
+    var wikiReference       = this.documentReference.extractReference(XWiki.EntityType.WIKI);
+    var spaceReference      = this.documentReference.extractReference(XWiki.EntityType.SPACE);
+    var localSpaceReference = spaceReference.relativeTo(wikiReference);
+    this.page   = this.documentReference.extractReferenceValue(XWiki.EntityType.DOCUMENT);
+    this.space  = XWiki.Model.serialize(localSpaceReference);
+    this.spaces = localSpaceReference.getReversedReferenceChain().map(function(spaceRef) {
+      return spaceRef.getName();
+    });
+    this.wiki   = this.documentReference.extractReferenceValue(XWiki.EntityType.WIKI);
+  },
+  
+  /**
+   * Initialize the document with some strings
+   */
+  initializeFromStrings : function(page, space, wiki) {
+    this.page = page || XWiki.Document.currentPage;
+    // Note: Starting with XWiki 7.2M1 the this.space variable is deprecated and holds a space reference (i.e. one or
+    // several spaces separated by dots, e.g. "space1.space2").
+    // It is recommended to use the new this.spaces variable which is an array of space Strings, representing the spaces
+    // in which the document is located.
+    this.space = space || XWiki.Document.currentSpace;
+    var localSpaceReference = XWiki.Model.resolve(this.space, XWiki.EntityType.SPACE);
+    this.spaces = localSpaceReference.getReversedReferenceChain().map(function(spaceRef) {
+      return spaceRef.getName();
+    });
+    this.wiki = wiki || XWiki.Document.currentWiki;
+    this.documentReference = new XWiki.DocumentReference(this.wiki, this.spaces, this.page);
+  },
+  
   /**
    * Gets an URL pointing to this document.
    */
   getURL : function(action, queryString, fragment) {
     action = action || 'view';
     var url = XWiki.Document.URLTemplate;
-    url = url.replace("__space__", encodeURIComponent(this.space));
+    var spaceSegments = this.spaces.map(function(spaceSegment) {
+      return encodeURIComponent(spaceSegment);
+    }).join('/');
+    url = url.replace("__space__", spaceSegments);
     url = url.replace("__page__", (this.page == 'WebHome') ? '' : encodeURIComponent(this.page));
     url = url.replace("__action__/", encodeURIComponent(action) + "/");
     if (queryString) {
@@ -1265,7 +1330,10 @@ XWiki.Document = Class.create({
     entity = entity || '';
     var url = XWiki.Document.RestURLTemplate;
     url = url.replace("__wiki__", this.wiki);
-    url = url.replace("__space__", this.space);
+    var spaceSegments = this.spaces.map(function(spaceSegment) {
+      return encodeURIComponent(spaceSegment);
+    }).join('/spaces/');
+    url = url.replace("__space__", spaceSegments);
     url = url.replace("__page__", this.page);
     if (entity) {
       url += "/" + entity;
@@ -1274,35 +1342,46 @@ XWiki.Document = Class.create({
       url += '?' + queryString;
     }
     return url;
+  },
+  getDocumentReference : function() {
+    return this.documentReference;
   }
 });
 /* Initialize the document URL factory, and create XWiki.currentDocument.
-TODO: use the new API to get the document meta data (see: http://jira.xwiki.org/browse/XWIKI-11225) */
+TODO: use the new API to get the document meta data (see: http://jira.xwiki.org/browse/XWIKI-11225).
+Currently not done because the new API is asynchronous meanwhile this script must be loaded first/ */
 var htmlElement = $(document.documentElement);
-XWiki.Document.currentWiki = XWiki.currentWiki || "xwiki";
-if (htmlElement.readAttribute('data-xwiki-wiki')) {
-  // HTML 5 attribute
-  XWiki.Document.currentWiki = htmlElement.readAttribute('data-xwiki-wiki');
-} else if ($$("meta[name=wiki]").length > 0) {
-  // Old meta tag
-  XWiki.Document.currentWiki = $$("meta[name=wiki]")[0].content
-} 
-XWiki.Document.currentSpace = XWiki.currentSpace || "Main";
-if (htmlElement.readAttribute('data-xwiki-space')) {
-  // HTML 5 attribute
-  XWiki.Document.currentSpace = htmlElement.readAttribute('data-xwiki-space');
-} else if ($$("meta[name=space]").length > 0) {
-  // Old meta tag
-  XWiki.Document.currentSpace = $$("meta[name=space]")[0].content
+if (htmlElement.readAttribute('data-xwiki-reference') != null) {
+  // Case 1: meta information are stored in the data- attributes of the <html> tag
+  // (since Flamingo)
+  var documentReference = XWiki.Model.resolve(
+    htmlElement.readAttribute('data-xwiki-reference'), XWiki.EntityType.DOCUMENT);
+  var spaceReference    = documentReference.extractReference(XWiki.EntityType.SPACE);
+  var wikiReference     = documentReference.extractReference(XWiki.EntityType.WIKI);
+  XWiki.Document.currentDocumentReference = documentReference;
+  XWiki.Document.currentPage              = XWiki.Document.currentDocumentReference.getName();
+  XWiki.Document.currentSpace             = XWiki.Model.serialize(spaceReference.relativeTo(wikiReference));
+  XWiki.Document.currentWiki              = wikiReference.getName();
+  XWiki.currentDocument = new XWiki.Document();
+} else {
+  // Case 2: meta information are stored in deprecated <meta> tags
+  // (in colibri)
+  XWiki.Document.currentWiki  = XWiki.currentWiki  || "xwiki";
+  XWiki.Document.currentSpace = XWiki.currentSpace || "Main";
+  XWiki.Document.currentPage  = XWiki.currentPage  || "WebHome";
+  if ($$("meta[name=wiki]").length > 0) {
+    XWiki.Document.currentWiki = $$("meta[name=wiki]")[0].content;
+  }
+  if ($$("meta[name=space]").length > 0) {
+    XWiki.Document.currentSpace = $$("meta[name=space]")[0].content;
+  }
+  if ($$("meta[name=page]").length > 0) {
+    XWiki.Document.currentPage = $$("meta[name=page]")[0].content;
+  }
+  XWiki.currentDocument = new XWiki.Document(XWiki.Document.currentPage, XWiki.Document.currentSpace,
+    XWiki.Document.currentWiki);
+  XWiki.Document.currentDocumentReference = XWiki.currentDocument.getDocumentReference();
 }
-XWiki.Document.currentPage = XWiki.currentPage || "WebHome";
-if (htmlElement.readAttribute('data-xwiki-page')) {
-    // HTML 5 attribute
-  XWiki.Document.currentPage = htmlElement.readAttribute('data-xwiki-page');
-} else if ($$("meta[name=page]").length > 0) {
-  // Old meta tag
-  XWiki.Document.currentPage = $$("meta[name=page]")[0].content
-} 
 XWiki.Document.URLTemplate = "$xwiki.getURL('__space__.__page__', '__action__')";
 XWiki.Document.RestURLTemplate = "${request.contextPath}/rest/wikis/__wiki__/spaces/__space__/pages/__page__";
 XWiki.Document.WikiSearchURLStub = "${request.contextPath}/rest/wikis/__wiki__/search";
@@ -1320,7 +1399,6 @@ XWiki.Document.getRestSearchURL = function(queryString, space, wiki) {
   }
   return url;
 };
-XWiki.currentDocument = new XWiki.Document();
 
 /**
  * Small JS improvement, which automatically hides and reinserts the default text for input fields, acting as a tip.

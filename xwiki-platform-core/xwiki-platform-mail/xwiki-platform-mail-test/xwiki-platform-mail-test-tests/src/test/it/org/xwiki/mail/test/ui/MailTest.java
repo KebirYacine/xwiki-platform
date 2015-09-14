@@ -32,8 +32,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.openqa.selenium.By;
-import org.xwiki.administration.test.po.AdministrablePage;
 import org.xwiki.administration.test.po.AdministrationPage;
 import org.xwiki.mail.test.po.MailStatusAdministrationSectionPage;
 import org.xwiki.mail.test.po.SendMailAdministrationSectionPage;
@@ -80,23 +78,17 @@ public class MailTest extends AbstractTest
     @Test
     public void testMail() throws Exception
     {
-        // Because of http://jira.xwiki.org/browse/XWIKI-9763 we need to create a test page to ensure there's at least
-        // one non-hidden page in the XWiki space
-        // TODO: Remove this once http://jira.xwiki.org/browse/XWIKI-9763 is fixed.
-        getUtil().createPage("XWiki", getTestClassName() + "-" + getTestMethodName(), "", "");
-
         // Step 1: Verify that there are 2 email sections in the Email category
 
-        AdministrablePage page = new AdministrablePage();
-        AdministrationPage administrationPage = page.clickAdministerWiki();
+        AdministrationPage wikiAdministrationPage = AdministrationPage.gotoPage();
 
-        Assert.assertTrue(administrationPage.hasSection("Email", "General"));
-        Assert.assertTrue(administrationPage.hasSection("Email", "Mail Sending"));
+        Assert.assertTrue(wikiAdministrationPage.hasSection("Email", "General"));
+        Assert.assertTrue(wikiAdministrationPage.hasSection("Email", "Mail Sending"));
 
         // Step 2: Navigate to each mail section and set the mail sending parameters (SMTP host/port)
 
-        administrationPage.clickSection("Email", "General");
-        administrationPage.clickSection("Email", "Mail Sending");
+        wikiAdministrationPage.clickSection("Email", "General");
+        wikiAdministrationPage.clickSection("Email", "Mail Sending");
         SendMailAdministrationSectionPage sendMailPage = new SendMailAdministrationSectionPage();
         sendMailPage.setHost("localhost");
         sendMailPage.setPort("3025");
@@ -110,13 +102,7 @@ public class MailTest extends AbstractTest
         // Step 3: Verify that there are no admin email sections when administering a space
 
         // Select XWiki space administration.
-        AdministrationPage spaceAdministrationPage = administrationPage.selectSpaceToAdminister("XWiki");
-
-        // Since clicking on "XWiki" in the Select box will reload the page asynchronously we need to wait for the new
-        // page to be available. For this we wait for the heading to be changed to "Administration:XWiki".
-        getDriver().waitUntilElementIsVisible(By.id("HAdministration:XWiki"));
-        // Also wait till the page is fully loaded to be extra sure...
-        spaceAdministrationPage.waitUntilPageIsLoaded();
+        AdministrationPage spaceAdministrationPage = AdministrationPage.gotoSpaceAdministrationPage("XWiki");
 
         // All those sections should not be present
         Assert.assertTrue(spaceAdministrationPage.hasNotSection("Email", "General"));
@@ -158,8 +144,8 @@ public class MailTest extends AbstractTest
 
         // Step 7: Navigate to the Mail Sending Status Admin page and assert that the Livetable displays the entry for
         // the sent mails
-        administrationPage = AdministrationPage.gotoPage();
-        administrationPage.clickSection("Email", "Mail Sending Status");
+        wikiAdministrationPage = AdministrationPage.gotoPage();
+        wikiAdministrationPage.clickSection("Email", "Mail Sending Status");
         MailStatusAdministrationSectionPage statusPage = new MailStatusAdministrationSectionPage();
         LiveTableElement liveTableElement = statusPage.getLiveTable();
         liveTableElement.filterColumn("xwiki-livetable-sendmailstatus-filter-3", "Test");

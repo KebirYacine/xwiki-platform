@@ -14,12 +14,13 @@ $xwiki.jsfx.use('js/scriptaculous/effects.js', true)##
 ## help debugging we provide/bundle the individual files also and you can load them instead of the aggregated files by
 ## passing 'minify=false' in the request query string or setting debug.minify property in xwiki.properties file.
 #if (!$services.debug.minify)
+  ## entityReferences.js should be loaded first because it is used by xwiki.js
+  $xwiki.jsfx.use('uicomponents/model/entityReference.js', {'defer': false})##
   $xwiki.jsfx.use('js/xwiki/xwiki.js', {'forceSkinAction': true, 'defer': false})##
   $xwiki.jsfx.use('js/xwiki/widgets/modalPopup.js', true)##
   $xwiki.ssfx.use('js/xwiki/widgets/modalPopup.css', {'forceSkinAction' : true, 'colorTheme' : $themeDoc})##
   $xwiki.jsfx.use('js/xwiki/widgets/jumpToPage.js', true)##
   $xwiki.ssfx.use('js/xwiki/widgets/jumpToPage.css', {'forceSkinAction' : true, 'language' : $xcontext.language})##
-  $xwiki.jsfx.use('uicomponents/model/entityReference.js')##
   $xwiki.jsfx.use('uicomponents/widgets/confirmationBox.js', true)##
   $xwiki.ssfx.use('uicomponents/widgets/confirmationBox.css', true)##
   $xwiki.jsfx.use('uicomponents/widgets/confirmedAjaxRequest.js', true)##
@@ -101,10 +102,13 @@ require.config({
     'jquery': '#removeJsSuffix($services.webjars.url("jquery", "jquery${jsExtension}"))',
     'bootstrap': '#removeJsSuffix($services.webjars.url("bootstrap", "js/bootstrap${jsExtension}"))',
     'xwiki-meta': '$stringtool.removeEnd($xwiki.getSkinFile('js/xwiki/meta.js'), '.js')',
-    'xwiki-events-bridge': "$stringtool.removeEnd($xwiki.getSkinFile('js/xwiki/eventsBridge.js'), '.js')"
+    'xwiki-events-bridge': "$stringtool.removeEnd($xwiki.getSkinFile('js/xwiki/eventsBridge.js'), '.js')",
+    'iscroll': '#removeJsSuffix($services.webjars.url('iscroll/5.1.3/build/iscroll-lite.js'))',
+    'drawer': '#removeJsSuffix($services.webjars.url('drawer', "js/jquery.drawer${jsExtension}"))'
   },
   shim: {
-    'bootstrap' : ['jquery']
+    'bootstrap' : ['jquery'],
+    'drawer': ['jquery', 'iscroll']
   },
   ## see: http://requirejs.org/docs/jquery.html#noconflictmap to see why this works.
   map: {
@@ -138,6 +142,11 @@ if (Prototype.BrowserFeatures.ElementExtensions) {
     disablePrototypeJS('hide', pluginsToDisable);
   });
 }
+require(['jquery', 'drawer'], function($) {
+  $(document).ready(function() {
+    $('body').drawer();
+  });
+});
 XWiki.webapppath = "${xwiki.webAppPath}";
 XWiki.servletpath = "${xwiki.servletPath}";
 XWiki.contextPath = "${request.contextPath}";

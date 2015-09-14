@@ -24,8 +24,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
+import org.apache.commons.lang3.StringUtils;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Capabilities;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.NotFoundException;
 import org.openqa.selenium.OutputType;
@@ -752,5 +754,33 @@ public class XWikiWebDriver extends RemoteWebDriver
     public String toString()
     {
         return this.wrappedDriver.toString();
+    }
+
+    /**
+     * Compared to using clear() + sendKeys(), this method ensures that an "input" event is triggered on the JavaScript
+     * side for an empty ("") value. Without this, the clear() method triggers just a "change" event.
+     *
+     * @param textInputElement an element accepting text input
+     * @param newTextValue the new text value to set
+     * @see <a href="https://code.google.com/p/selenium/issues/detail?id=214">Issue 214</a>
+     * @since 7.2M3
+     */
+    public void setTextInputValue(WebElement textInputElement, String newTextValue)
+    {
+        if (StringUtils.isEmpty(newTextValue)) {
+            // Workaround for the fact that clear() fires the "change" event but not the "input" event and javascript
+            // listening to the "input" event will not be executed otherwise.
+            // Note 1: We're not using CTRL+A and the Delete because the key combination to select the full input
+            //         depends on the OS (on Mac it's META+A for example).
+            // Note 2: Sending the END key didn't always work when I tested it on Mac (for some unknown reason)
+            textInputElement.click();
+            textInputElement.sendKeys(
+                StringUtils.repeat(Keys.ARROW_RIGHT.toString(), textInputElement.getAttribute("value").length()));
+            textInputElement.sendKeys(
+                StringUtils.repeat(Keys.BACK_SPACE.toString(), textInputElement.getAttribute("value").length()));
+        } else {
+            textInputElement.clear();
+            textInputElement.sendKeys(newTextValue);
+        }
     }
 }

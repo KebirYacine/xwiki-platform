@@ -11,18 +11,15 @@
   data-xwiki-${name}="$escapetool.xml($value)"
 #end
 <html xmlns="http://www.w3.org/1999/xhtml" lang="$xcontext.language" xml:lang="$xcontext.language"
-  ## Note: Starting with XWiki 7.2M2, the "document", "xwiki", "space" and "page" metas are deprecated
-  ## and it's recommended to use the new "reference" meta instead, which holds the full String reference of the current
-  ## document.
-  ## In addition starting with XWiki 7.2M1, the "space" variable now holds the full space reference (i.e. one or
-  ## several spaces separated by dots, e.g. "space1.space2").
-  #xwikiDataAttribute('reference', $services.model.serialize($doc.documentReference))
-  #xwikiDataAttribute('document', $doc.fullName)## Deprecated
-  #xwikiDataAttribute('wiki', $doc.wiki)## Deprecated
-  #xwikiDataAttribute('space', $doc.space)## Deprecated
-  #xwikiDataAttribute('page', $doc.name)## Deprecated
+  ## NOTE: you should not use these attributes in javascript directly, but via the 'xwiki-meta' module instead:
+  ## http://platform.xwiki.org/xwiki/bin/view/DevGuide/JavaScriptAPI#HGetsomeinformationaboutthecurrentdocument
+  #xwikiDataAttribute('reference', $services.model.serialize($doc.documentReference, 'default'))
+  #xwikiDataAttribute('document', $doc.fullName)##deprecated, use 'reference' instead
+  #xwikiDataAttribute('wiki', $doc.wiki)##deprecated, use 'reference' instead
+  #xwikiDataAttribute('space', $doc.space)##deprecated, use 'reference' instead
+  #xwikiDataAttribute('page', $doc.name)##deprecated, use 'reference' instead
   #xwikiDataAttribute('version', $doc.version)
-  #xwikiDataAttribute('rest-url', $services.rest.url($doc.documentReference).path)
+  #xwikiDataAttribute('rest-url', $services.rest.url($doc.documentReference))
   #xwikiDataAttribute('form-token', "$!{services.csrf.token}")>
   <head>
     ## ---------------------------------------------------------------------------------------------------------------
@@ -95,6 +92,7 @@
     ## Hook for inserting Link extensions. This will be replaced with the pulled link references.
     ## ---------------------------------------------------------------------------------------------------------------
     <!-- com.xpn.xwiki.plugin.skinx.LinkExtensionPlugin -->
+    <link href="$services.webjars.url('drawer', 'css/drawer.min.css')" rel="stylesheet" type="text/css" />
     #template("stylesheets.vm")
     #template("javascript.vm")
   </head>
@@ -110,6 +108,6 @@
   #set($bodyAction = "view")
 #end
 ## These elements will be closed in the htmlfooter.vm file
-<$bodyTagName id="body" class="skin-flamingo wiki-${xcontext.database} space-${escapetool.xml($doc.space.replaceAll(' ', '_'))} ${bodyAction}body #if($showLeftPanels == "0")hideleft#end#if($showRightPanels == "0")hideright#end#if($hidecolumns && ($!hidecolumns == 1))hidelefthideright#end #if($showLeftPanels != "0" && $showRightPanels != "0" && $!hidecolumns != 1)content#end panel-left-width-${leftPanelsWidth} panel-right-width-${rightPanelsWidth}">
+<$bodyTagName id="body" class="skin-flamingo wiki-${xcontext.database} space-${escapetool.xml($doc.space.replaceAll(' ', '_'))} ${bodyAction}body #if($showLeftPanels == "0")hideleft#end#if($showRightPanels == "0")hideright#end#if($hidecolumns && ($!hidecolumns == 1))hidelefthideright#end #if($showLeftPanels != "0" && $showRightPanels != "0" && $!hidecolumns != 1)content#end panel-left-width-${leftPanelsWidth} panel-right-width-${rightPanelsWidth} drawer drawer-right drawer-close">
 <div id="xwikimaincontainer">
 <div id="xwikimaincontainerinner">

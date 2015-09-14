@@ -121,6 +121,7 @@ import org.xwiki.model.reference.DocumentReferenceResolver;
 import org.xwiki.model.reference.EntityReference;
 import org.xwiki.model.reference.EntityReferenceResolver;
 import org.xwiki.model.reference.EntityReferenceSerializer;
+import org.xwiki.model.reference.LocalDocumentReference;
 import org.xwiki.model.reference.ObjectReference;
 import org.xwiki.model.reference.RegexEntityReference;
 import org.xwiki.model.reference.SpaceReference;
@@ -425,6 +426,12 @@ public class XWiki implements EventListener
     private AttachmentReferenceResolver<EntityReference> currentAttachmentReferenceResolver;
 
     private SpaceReferenceResolver<String> currentSpaceResolver;
+
+    /**
+     * List of top level space names that can be used in the fake context document created when accessing a resource
+     * with the 'skin' action.
+     */
+    private List<String> SKIN_RESOURCE_SPACE_NAMES = Arrays.asList("skins", "resources");
 
     private ConfigurationSource getConfiguration()
     {
@@ -1133,7 +1140,6 @@ public class XWiki implements EventListener
     /**
      * @return a cached list of all active virtual wikis (i.e. wikis who have been hit by a user request). To get a full
      *         list of all virtual wikis database names use {@link #getVirtualWikisDatabaseNames(XWikiContext)}.
-     * @deprecated since 5.3, use {@link WikiDescriptorManager#getAll()} instead
      */
     @Deprecated
     public List<String> getVirtualWikiList()
@@ -1544,7 +1550,7 @@ public class XWiki implements EventListener
      * Since 7.2M1, the passed reference can be anything. If if a document child, the document reference will be
      * extracted from it. If it's a document parent it will be completed with the necessary default references (for
      * example if it's a space reference it will load the space home page).
-     * 
+     *
      * @since 5.0M1
      */
     @Unstable
@@ -2852,8 +2858,8 @@ public class XWiki implements EventListener
      */
     public BaseClass getEditModeClass(XWikiContext context) throws XWikiException
     {
-        return getMandatoryClass(context, new DocumentReference(context.getWikiId(), XWikiConstant.EDIT_MODE_CLASS
-            .getParent().getName(), XWikiConstant.EDIT_MODE_CLASS.getName()));
+        return getMandatoryClass(context, new DocumentReference(new LocalDocumentReference(
+            XWikiConstant.EDIT_MODE_CLASS), new WikiReference(context.getWikiId())));
     }
 
     /**
@@ -3426,14 +3432,19 @@ public class XWiki implements EventListener
 
     public boolean checkAccess(String action, XWikiDocument doc, XWikiContext context) throws XWikiException
     {
-        if (action.equals("skin") && (doc.getSpace().equals("skins") || doc.getSpace().equals("resources"))) {
+        // Handle the 'skin' action specially so that resources don`t require special (or even 'view') rights.
+        String firstSpaceName = doc.getDocumentReference().getSpaceReferences().get(0).getName();
+        if (action.equals("skin") && SKIN_RESOURCE_SPACE_NAMES.contains(firstSpaceName)) {
             // We still need to call checkAuth to set the proper user.
             XWikiUser user = checkAuth(context);
             if (user != null) {
                 context.setUser(user.getUser());
             }
+
+            // Always allow.
             return true;
         }
+
         return getRightService().checkAccess(action, doc, context);
     }
 
@@ -4208,16 +4219,25 @@ public class XWiki implements EventListener
     }
 
     /**
+     * @since 7.2RC1
+     */
+    public String getURL(EntityReference reference, XWikiContext context)
+    {
+        String action = "view";
+        if (reference.getType() == EntityType.ATTACHMENT) {
+            action = "download";
+        }
+        return getURL(reference, action, context);
+    }
+
+    /**
      * @since 2.2.1
      */
     public String getURL(DocumentReference documentReference, String action, String queryString, String anchor,
         XWikiContext context)
     {
-        // Extract and escape the spaces portion of the passed reference to pass to the old createURL() API which
-        // unfortunately doesn't accept a DocumentReference...
-        EntityReference spaceReference =
-            documentReference.getLastSpaceReference().removeParent(documentReference.getWikiReference());
-        String spaces = this.defaultEntityReferenceSerializer.serialize(spaceReference);
+        // We need to serialize the space reference because the old createURL() API doesn't accept a DocumentReference.
+        String spaces = this.localStringEntityReferenceSerializer.serialize(documentReference.getLastSpaceReference());
 
         URL url =
             context.getURLFactory().createURL(spaces, documentReference.getName(), action, queryString, anchor,
@@ -4348,28 +4368,10 @@ public class XWiki implements EventListener
 
     // Usefull date functions
 
-    /**
-     * @deprecated use {@link Date#Date()} instead...
-     */
-    @Deprecated
-    public Date getCurrentDate()
-    {
-        return new Date();
-    }
-
     public int getTimeDelta(long time)
     {
         Date ctime = new Date();
         return (int) (ctime.getTime() - time);
-    }
-
-    /**
-     * @deprecated use {@link Date#Date(long)} instead...
-     */
-    @Deprecated
-    public Date getDate(long time)
-    {
-        return new Date(time);
     }
 
     public boolean isMultiLingual(XWikiContext context)
@@ -4903,15 +4905,6 @@ public class XWiki implements EventListener
         }
 
         return this.fullNameSQL;
-    }
-
-    /**
-     * @deprecated use {@link EntityReferenceResolver} instead
-     */
-    @Deprecated
-    public String getDocName(String fullName)
-    {
-        return fullName.substring(fullName.indexOf('.') + 1);
     }
 
     public String getUserName(String user, XWikiContext context)

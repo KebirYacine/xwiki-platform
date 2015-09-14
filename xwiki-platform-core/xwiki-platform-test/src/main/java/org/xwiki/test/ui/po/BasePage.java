@@ -22,7 +22,6 @@ package org.xwiki.test.ui.po;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.FindBys;
 import org.xwiki.test.ui.po.editor.ClassEditPage;
@@ -50,16 +49,16 @@ public class BasePage extends BaseElement
      */
     @FindBy(id = "contentmenu")
     private WebElement contentMenuBar;
+    
+    @FindBy(xpath ="//div[@id='tmCreate']/a[contains(@role, 'button')]")
+    private WebElement tmCreate;
+    
+    @FindBy(xpath = "//div[@id='tmMoreActions']/a[contains(@role, 'button')]")
+    private WebElement moreActionsMenu;
 
-    @FindBy(id = "tmCreatePage")
-    private WebElement createPageMenuLink;
-
-    @FindBy(id = "tmCreateSpace")
-    private WebElement createSpaceMenuLink;
-
-    @FindBy(xpath = "//div[@id='tmCreate']//button[contains(@class, 'dropdown-toggle')]")
-    private WebElement createMenu;
-
+    @FindBy(id ="tmDrawerActivator")
+    private WebElement drawerActivator;
+    
     @FindBy(id = "tmActionCopy")
     private WebElement copyPageLink;
 
@@ -78,20 +77,17 @@ public class BasePage extends BaseElement
     @FindBy(xpath = "//a[@id='tmLogin']")
     private WebElement loginLink;
 
-    @FindBy(xpath = "//li[@id='tmUser']/a[contains(@title, 'Profile:')]")
+    @FindBy(xpath = "//div[@id='xwikimainmenu']//li[contains(@class, 'navbar-avatar')]/a")
     private WebElement userLink;
+
+    @FindBy(xpath = "//li[contains(@class, 'navbar-avatar')]//img[contains(@class, 'avatar')]")
+    private WebElement userAvatarImage;
 
     @FindBy(id = "document-title")
     private WebElement documentTitle;
 
     @FindBy(id = "tmWatchSpace")
     private WebElement watchSpaceLink;
-
-    @FindBy(id = "tmSpace")
-    private WebElement spaceMenu;
-
-    @FindBy(id = "tmWiki")
-    private WebElement wikiMenu;
 
     @FindBy(id = "tmWatchWiki")
     private WebElement watchWikiLink;
@@ -125,7 +121,22 @@ public class BasePage extends BaseElement
         return getDriver().getCurrentUrl();
     }
 
+    /**
+     * @param metaName the name of the XWiki document metadata
+     * @return the value of the specified XWiki document metadata for the current XWiki document
+     * @see {@link #getHTMLMetaDataValue(String)} for HTML meta field values
+     */
     public String getMetaDataValue(String metaName)
+    {
+        return getDriver().findElement(By.xpath("/html")).getAttribute("data-xwiki-" + metaName);
+    }
+
+    /**
+     * @param metaName the name of the HTML meta field
+     * @return the value of the requested HTML meta field with from the current page
+     * @since 7.2RC1
+     */
+    public String getHTMLMetaDataValue(String metaName)
     {
         return getDriver().findElement(By.xpath("//meta[@name='" + metaName + "']")).getAttribute("content");
     }
@@ -135,9 +146,8 @@ public class BasePage extends BaseElement
      */
     public boolean isAuthenticated()
     {
-        // Note that we cannot test if the userLink field is accessible since we're using an AjaxElementLocatorFactory
-        // and thus it would wait 15 seconds before considering it's not accessible.
-        return !getDriver().findElementsWithoutWaiting(By.id("tmUser")).isEmpty();
+        return getDriver().hasElementWithoutWaiting(
+                By.xpath("//div[@id='xwikimainmenu']//li[contains(@class, 'navbar-avatar')]//img"));
     }
 
     /**
@@ -157,7 +167,7 @@ public class BasePage extends BaseElement
      */
     protected void clickEditSubMenuEntry(String id)
     {
-        clickSubMenuEntryFromMenu(By.xpath("//div[@id='tmEdit']//button"), id);
+        clickSubMenuEntryFromMenu(By.xpath("//div[@id='tmEdit']/a[contains(@role, 'button')]"), id);
     }
 
     /**
@@ -165,11 +175,13 @@ public class BasePage extends BaseElement
      */
     public void edit()
     {
+        WebElement editMenuButton =
+                getDriver().findElement(By.xpath("//div[@id='tmEdit']/a[contains(@role, 'button')]"));
         // The edit button is not the same depending on whether the user is advanced or not
-        if (getDriver().hasElementWithoutWaiting(By.xpath("//div[@id='tmEdit']//a"))) {
-            getDriver().findElement(By.xpath("//div[@id='tmEdit']//a")).click();
+        if ("dropdown".equals(editMenuButton.getAttribute("data-toggle"))) {
+            clickEditSubMenuEntry("tmEditDefault");
         } else {
-            getDriver().findElement(By.xpath("//a[@id='tmEdit']")).click();
+            editMenuButton.click();
         }
     }
 
@@ -266,58 +278,28 @@ public class BasePage extends BaseElement
     }
 
     /**
-     * @since 5.4RC1
+     * @since 7.2M3  
      */
-    public void moveToCreateMenu()
+    public void toggleDrawer()
     {
-        new Actions(getDriver()).moveToElement(createMenu).perform();
-    }
-
-    /**
-     * On Flamingo, we have to click to open the menu (hovering it is not enough).
-     * 
-     * @since 6.2M2
-     */
-    public void toggleCreateMenu()
-    {
-        this.createMenu.click();
-    }
-
-    /**
-     * @since 6.2M2
-     */
-    public void togglePageMenu()
-    {
-        toggleTopMenu("tmPage");
-    }
-
-    /**
-     * @since 6.2M2
-     */
-    public void toggleUserMenu()
-    {
-        toggleTopMenu("tmUser");
-    }
-
-    /**
-     * @since 6.2M2
-     */
-    public void toggleSpaceMenu()
-    {
-        toggleTopMenu("tmSpace");
-    }
-
-    /**
-     * @since 6.2M2
-     */
-    public void toggleWikiMenu()
-    {
-        // Depending on if the current wiki is a subwiki or not
-        String wikiMenuId = "tmWiki";
-        if (!getDriver().hasElement(By.id(wikiMenuId))) {
-            wikiMenuId = "tmMainWiki";
+        By drawer = By.id("tmDrawer");
+        if (getDriver().findElementWithoutWaiting(drawer).isDisplayed()) {
+            // The drawer is visible, so we close it by clicking outside the drawer
+            this.mainContainerDiv.click();
+            getDriver().waitUntilElementDisappears(drawer);
+        } else {
+            // The drawer is not visible, so we open it
+            this.drawerActivator.click();
+            getDriver().waitUntilElementIsVisible(drawer);
         }
-        toggleTopMenu(wikiMenuId);
+    }
+
+    /**
+     * @since 7.2M3
+     */
+    public void toggleActionMenu()
+    {
+        this.moreActionsMenu.click();
     }
 
     /**
@@ -326,7 +308,7 @@ public class BasePage extends BaseElement
     public void clickMoreActionsSubMenuEntry(String id)
     {
         clickSubMenuEntryFromMenu(
-            By.xpath("//div[@id='tmMoreActions']/button[contains(@class, 'dropdown-toggle')]"), id);
+                By.xpath("//div[@id='tmMoreActions']/a[contains(@role, 'button')]"), id);
     }
 
     /**
@@ -356,29 +338,13 @@ public class BasePage extends BaseElement
         return By.xpath("//li[@id='" + menuId + "']//a[contains(@class, 'dropdown-split-" + side + "')]");
     }
 
-    private void toggleTopMenu(String menuId)
-    {
-        getDriver().findElement(getTopMenuToggleSelector(menuId)).click();
-    }
-
     /**
      * @since 4.5M1
      */
     public CreatePagePage createPage()
     {
-        toggleCreateMenu();
-        this.createPageMenuLink.click();
+        this.tmCreate.click();
         return new CreatePagePage();
-    }
-
-    /**
-     * @since 4.5M1
-     */
-    public CreateSpacePage createSpace()
-    {
-        toggleCreateMenu();
-        this.createSpaceMenuLink.click();
-        return new CreateSpacePage();
     }
 
     /**
@@ -386,8 +352,7 @@ public class BasePage extends BaseElement
      */
     public CopyPage copy()
     {
-        togglePageMenu();
-        this.copyPageLink.click();
+        clickMoreActionsSubMenuEntry("tmActionCopy");
         return new CopyPage();
     }
 
@@ -396,8 +361,7 @@ public class BasePage extends BaseElement
      */
     public ConfirmationPage delete()
     {
-        togglePageMenu();
-        this.deletePageLink.click();
+        clickMoreActionsSubMenuEntry("tmActionDelete");
         return new ConfirmationPage();
     }
 
@@ -406,12 +370,12 @@ public class BasePage extends BaseElement
      */
     public boolean canDelete()
     {
-        if (getDriver().hasElement(By.xpath("//li[@id='tmPage']//a[contains(@class, 'dropdown-toggle')]"))) {
-            togglePageMenu();
-            return getDriver().hasElement(By.id("tmActionDelete"));
-        } else {
-            return false;
-        }
+        toggleActionMenu();
+        // Don't wait here since test can use this method to verify that there's no Delete right on the current page
+        // and calling hasElement() would incurr the wait timeout.
+        boolean canDelete = getDriver().hasElementWithoutWaiting(By.id("tmActionDelete"));
+        toggleActionMenu();
+        return canDelete;
     }
 
     /**
@@ -419,8 +383,9 @@ public class BasePage extends BaseElement
      */
     public void watchDocument()
     {
-        togglePageMenu();
+        toggleActionMenu();
         this.watchDocumentLink.click();
+        toggleActionMenu();
     }
 
     /**
@@ -428,9 +393,12 @@ public class BasePage extends BaseElement
      */
     public boolean hasLoginLink()
     {
+        toggleDrawer();
         // Note that we cannot test if the loginLink field is accessible since we're using an AjaxElementLocatorFactory
         // and thus it would wait 15 seconds before considering it's not accessible.
-        return !getDriver().findElementsWithoutWaiting(By.id("tmLogin")).isEmpty();
+        boolean result = !getDriver().findElementsWithoutWaiting(By.id("tmLogin")).isEmpty();
+        toggleDrawer();
+        return result;
     }
 
     /**
@@ -438,6 +406,7 @@ public class BasePage extends BaseElement
      */
     public LoginPage login()
     {
+        toggleDrawer();
         this.loginLink.click();
         return new LoginPage();
     }
@@ -447,7 +416,8 @@ public class BasePage extends BaseElement
      */
     public String getCurrentUser()
     {
-        return this.userLink.getText();
+        // Get the user from the title attribute of the image displaying the user's avatar in the nav bar
+        return this.userAvatarImage.getAttribute("title");
     }
 
     /**
@@ -455,7 +425,7 @@ public class BasePage extends BaseElement
      */
     public void logout()
     {
-        toggleUserMenu();
+        toggleDrawer();
         getDriver().findElement(By.id("tmLogout")).click();
         // Update the CSRF token because the context user has changed (it's guest user now). Otherwise, APIs like
         // TestUtils#createUser*(), which expect the currently cached token to be valid, will fail because they would be
@@ -468,6 +438,7 @@ public class BasePage extends BaseElement
      */
     public RegistrationPage register()
     {
+        toggleDrawer();
         this.registerLink.click();
         return new RegistrationPage();
     }
@@ -485,8 +456,9 @@ public class BasePage extends BaseElement
      */
     public void watchSpace()
     {
-        toggleSpaceMenu();
+        toggleActionMenu();
         this.watchSpaceLink.click();
+        toggleActionMenu();
     }
 
     /**
@@ -494,17 +466,9 @@ public class BasePage extends BaseElement
      */
     public void watchWiki()
     {
-        toggleWikiMenu();
+        toggleActionMenu();
         this.watchWikiLink.click();
-    }
-
-    /**
-     * @return the URL of the link representing the current page in the Page top level menu entry
-     * @since 4.5M1
-     */
-    public String getPageMenuLink()
-    {
-        return this.pageMenu.findElement(By.xpath(".//a[contains(@title, 'Page: ')]")).getAttribute("href");
+        toggleActionMenu();
     }
 
     /**

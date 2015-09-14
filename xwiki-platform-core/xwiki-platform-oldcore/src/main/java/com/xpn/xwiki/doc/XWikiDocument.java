@@ -95,6 +95,7 @@ import org.xwiki.model.reference.AttachmentReference;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.DocumentReferenceResolver;
 import org.xwiki.model.reference.EntityReference;
+import org.xwiki.model.reference.EntityReferenceProvider;
 import org.xwiki.model.reference.EntityReferenceResolver;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.model.reference.LocalDocumentReference;
@@ -131,6 +132,8 @@ import org.xwiki.rendering.transformation.RenderingContext;
 import org.xwiki.rendering.transformation.TransformationContext;
 import org.xwiki.rendering.transformation.TransformationException;
 import org.xwiki.rendering.transformation.TransformationManager;
+import org.xwiki.security.authorization.ContextualAuthorizationManager;
+import org.xwiki.security.authorization.Right;
 import org.xwiki.velocity.VelocityManager;
 import org.xwiki.xar.internal.model.XarAttachmentModel;
 import org.xwiki.xar.internal.model.XarClassModel;
@@ -260,8 +263,8 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
 
     /**
      * Format for passing xproperties references in URLs. General format:
-     * {@code &lt;space&gt;.&lt;pageClass&gt;_&lt;number&gt;_&lt;propertyName&gt;}
-     * (e.g. {@code XWiki.XWikiRights_0_member}).
+     * {@code &lt;space&gt;.&lt;pageClass&gt;_&lt;number&gt;_&lt;propertyName&gt;} (e.g.
+     * {@code XWiki.XWikiRights_0_member}).
      */
     private static final Pattern XPROPERTY_REFERENCE_PATTERN = Pattern.compile("(.+?)_([0-9]+)_(.+)");
 
@@ -1444,13 +1447,12 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
      * Get the rendered version of the document title. The title is extracted and then Velocity is applied on it and
      * it's then rendered using the passed Syntax. The following logic is used to extract the title:
      * <ul>
-     *   <li>If a Sheet is specified for the document and this Sheet document contains a non empty title then it's used
-     *   </li>
-     *   <li>If not and the document's title is specified then it's used</li>
-     *   <li>If not and if the title compatibility mode is turned on ({@code xwiki.title.compatibility=1} in
-     *       {@code xwiki.cfg}) then an attempt is made to extract the title from the first heading found in the
-     *       document's content</li>
-     *   <li>If not, then at last resort the page name is returned</li>
+     * <li>If a Sheet is specified for the document and this Sheet document contains a non empty title then it's used</li>
+     * <li>If not and the document's title is specified then it's used</li>
+     * <li>If not and if the title compatibility mode is turned on ({@code xwiki.title.compatibility=1} in
+     * {@code xwiki.cfg}) then an attempt is made to extract the title from the first heading found in the document's
+     * content</li>
+     * <li>If not, then at last resort the page name is returned</li>
      * </ul>
      *
      * @param outputSyntax the syntax to render to; this is not taken into account for XWiki 1.0 syntax
@@ -5205,22 +5207,26 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
         List<DocumentReference> children = new ArrayList<DocumentReference>();
 
         try {
-            Query query = getStore().getQueryManager().createQuery(
-                "select distinct doc.space, doc.name from XWikiDocument doc where "
-                    + "doc.parent=:prefixedFullName or doc.parent=:fullName or (doc.parent=:name and doc.space=:space)",
-                Query.XWQL);
+            Query query =
+                getStore()
+                    .getQueryManager()
+                    .createQuery(
+                        "select distinct doc.fullName from XWikiDocument doc where "
+                            + "doc.parent=:prefixedFullName or doc.parent=:fullName or (doc.parent=:name and doc.space=:space)",
+                        Query.XWQL);
             query.addFilter(Utils.getComponent(QueryFilter.class, "hidden"));
-            query.bindValue("prefixedFullName",
-                getDefaultEntityReferenceSerializer().serialize(getDocumentReference()));
+            query
+                .bindValue("prefixedFullName", getDefaultEntityReferenceSerializer().serialize(getDocumentReference()));
             query.bindValue("fullName", LOCAL_REFERENCE_SERIALIZER.serialize(getDocumentReference()));
             query.bindValue("name", getDocumentReference().getName());
-            query.bindValue("space", getDocumentReference().getLastSpaceReference().getName());
+            query.bindValue("space",
+                LOCAL_REFERENCE_SERIALIZER.serialize(getDocumentReference().getLastSpaceReference()));
             query.setLimit(nb).setOffset(start);
-            List<Object[]> queryResults = query.execute();
 
-            for (Object[] queryResult : queryResults) {
-                children.add(new DocumentReference(this.getDocumentReference().getWikiReference().getName(),
-                    (String) queryResult[0], (String) queryResult[1]));
+            List<String> queryResults = query.execute();
+            WikiReference wikiReference = this.getDocumentReference().getWikiReference();
+            for (String fullName : queryResults) {
+                children.add(getCurrentDocumentReferenceResolver().resolve(fullName, wikiReference));
             }
         } catch (QueryException e) {
             throw new XWikiException(XWikiException.MODULE_XWIKI_STORE, XWikiException.ERROR_XWIKI_UNKNOWN,
@@ -6599,8 +6605,8 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
 
         // If the copied document has a title set to the original page name then set the new title to be the new page
         // name.
-        if (StringUtils.equals(newdoc.getTitle(), this.getDocumentReference().getName())) {
-            newdoc.setTitle(newDocumentReference.getName());
+        if (StringUtils.equals(newdoc.getTitle(), getPrettyName(this.getDocumentReference()))) {
+            newdoc.setTitle(getPrettyName(newDocumentReference));
         }
 
         newdoc.setOriginalDocument(null);
@@ -6613,6 +6619,22 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
         }
 
         return newdoc;
+    }
+
+    /**
+     * Avoid the technical "WebHome" name.
+     * 
+     * @param documentReference a document reference
+     * @return the last space name if the document is the home of a space, the document name otherwise
+     */
+    private String getPrettyName(DocumentReference documentReference)
+    {
+        EntityReferenceProvider defaultEntityReferenceProvider = Utils.getComponent(EntityReferenceProvider.class);
+        if (defaultEntityReferenceProvider.getDefaultReference(documentReference.getType()).getName()
+            .equals(documentReference.getName())) {
+            return documentReference.getLastSpaceReference().getName();
+        }
+        return documentReference.getName();
     }
 
     /**
@@ -8368,6 +8390,14 @@ public class XWikiDocument implements DocumentModelBridge, Cloneable
     private boolean executeValidationScript(XWikiContext context, String validationScript)
     {
         try {
+            ContextualAuthorizationManager authorization = Utils.getComponent(ContextualAuthorizationManager.class);
+            DocumentReference validationScriptReference =
+                getCurrentDocumentReferenceResolver().resolve(validationScript, getDocumentReference());
+
+            // Make sure target document is allowed to execute Groovy
+            // TODO: this check should probably be right in XWiki#parseGroovyFromPage
+            authorization.checkAccess(Right.PROGRAM, validationScriptReference);
+
             XWikiValidationInterface validObject =
                 (XWikiValidationInterface) context.getWiki().parseGroovyFromPage(validationScript, context);
 

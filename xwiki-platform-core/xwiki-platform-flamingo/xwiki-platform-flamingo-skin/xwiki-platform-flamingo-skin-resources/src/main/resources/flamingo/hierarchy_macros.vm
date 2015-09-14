@@ -1,0 +1,167 @@
+#**
+ * Display the path of the specified entity within the hierarchy.
+ *
+ * @param $entityReference the entity for which to display the hierarchy path, defaults on the current document
+ * @param $options various configuration options; see #getHierarchyPath() and #displayHierarchyPath()
+ *#
+#macro (hierarchy $entityReference $options)
+  #if (!$options)
+    #set ($options = {})
+  #else
+    ## We need to assign the options to a variable in case the user has passed a literal map.
+    #set ($options = $options)
+  #end
+  #if (!$entityReference)
+    ## Default on the current (translated) document.
+    #set ($entityReference = $tdoc.documentReference)
+    #if (!$options.entities)
+      #set ($discard = $options.put('entities', {}))
+    #end
+    #set ($discard = $options.entities.put($entityReference, $tdoc))
+  #end
+  #getHierarchyPath($entityReference $path $options)
+  #displayHierarchyPath($path $options)
+#end
+
+#**
+ * Compute the path of the specified entity within the hierarchy.
+ *
+ * @param $entityReference the entity for which to compute the path
+ * @options various configuration options; default values are {
+ *   local: false, // whether to compute the local path or not (i.e. including the wiki reference or not)
+ *   excludeSelf: false, // whether to exclude the passed reference from the path
+ *   limit: 0 // the maximum number of path elements (limit/2 on the left and the rest of the right)
+ * }
+ *#
+#macro (getHierarchyPath $entityReference $return $options)
+  #if (!$options)
+    #set ($options = {})
+  #end
+  #set ($macro.path = [])
+  #set ($discard = $macro.path.addAll($entityReference.reversedReferenceChain))
+  #if ($macro.path.get(0).type == 'WIKI')
+    #set ($wikiName = $macro.path.get(0).name)
+    #if ($options.local)
+      ## Remove the wiki reference.
+      #set ($discard = $macro.path.remove(0))
+    #elseif ($wikiName != $xcontext.mainWikiName && $services.wiki.user.getUserScope($wikiName) != 'LOCAL_ONLY')
+      ## Add the main wiki reference.
+      #set ($discard = $macro.path.add(0, $services.model.createWikiReference($xcontext.mainWikiName)))
+    #end
+  #end
+  ## Merge the space reference with the space home page reference.
+  #foreach ($reference in $macro.path)
+    #if ($reference.type == 'DOCUMENT' && $foreach.index > 0
+        && $reference.name == $services.model.getEntityReference('DOCUMENT', 'default').name
+        && $macro.path.get($mathtool.sub($foreach.index, 1)).type == 'SPACE')
+      #set ($discard = $macro.path.remove($reference))
+      #break
+    #end
+  #end
+  #if ($options.excludeSelf)
+    ## Remove the last reference.
+    #set ($discard = $macro.path.remove($mathtool.sub($macro.path.size(), 1)))
+  #end
+  ## Limit the number of path elements (by removing elements in the middle of the path).
+  #set ($size = $macro.path.size())
+  #if ($options.limit && $options.limit > 0 && $options.limit < $size)
+    #set ($left = $options.limit / 2)
+    #set ($right = $size - ($options.limit - $left))
+    #set ($limitedPath = [])
+    #set ($discard = $limitedPath.addAll($macro.path.subList(0, $left)))
+    #set ($discard = $limitedPath.add({'type': 'ellipsis'}))
+    #set ($discard = $limitedPath.addAll($macro.path.subList($right, $size)))
+    #set ($macro.path = $limitedPath)
+  #end
+  #set ($return = $NULL)
+  #setVariable("$return" $macro.path)
+#end
+
+#**
+ * Displays a hierarchy path computed with #getHierarchyPath().
+ *
+ * @param $path the hierarchy path to display
+ * @param $options various display options; default values are {
+ *   id: null, // the value of the id attribute to set on the container element
+ *   excludeSelf: false, // whether the target reference has been excluded from the path
+ *   entities: {} // a map of (reference, entity) pairs holding unsaved entities that should be used for display
+ * }
+ *#
+#macro (displayHierarchyPath $path $options)
+  #if (!$options)
+    #set ($options = {})
+  #end
+  <ol id="$!options.id" class="breadcrumb"><li
+    #foreach ($reference in $path)
+      #set ($url = $xwiki.getURL($reference))
+      #set ($label = $escapetool.xml($reference.name))
+      #set ($active = false)
+      #if ($reference.type == 'SPACE' || $reference.type == 'DOCUMENT')
+        ## Check if there is an unsaved document with this reference.
+        #set ($document = $options.entities.get($reference))
+        #if (!$document)
+          ## Get the saved document.
+          #set ($document = $xwiki.getDocument($reference).translatedDocument)
+        #end
+        #if ($document)
+          #set ($label = $escapetool.xml($document.plainTitle))
+        #else
+          ## A document the current user doesn't have access to.
+          #set ($active = true)
+        #end
+      #elseif ($reference.type == 'WIKI')
+        #if ($foreach.index == 0)
+          #set ($label = '<span class="glyphicon glyphicon-home"></span>')
+        #else
+          #set ($wikiPrettyName = $services.wiki.getById($reference.name).prettyName)
+          #if ("$!wikiPrettyName" != '')
+            #set ($label = $escapetool.xml($wikiPrettyName))
+          #end
+        #end
+      #elseif ($reference.type == 'ellipsis')
+        #set ($url = '#')
+        #set ($label = '&hellip;')
+      #elseif ($reference.type == 'OBJECT')
+        #if ($reference.objectNumber)
+          #set ($objectNumber = $reference.objectNumber)
+          #set ($objectType = $services.model.serialize($reference.xClassReference, 'local'))
+        #else
+          #set ($objectNumber = $stringtool.substringAfterLast($stringtool.removeEnd($reference.name, ']'), '['))
+          #set ($objectType = $stringtool.substringBeforeLast($reference.name, '['))
+        #end
+        #set ($url = $xwiki.getURL($reference, 'edit', $escapetool.url({
+          'editor': 'object',
+          'classname': $objectType,
+          'object': $objectNumber
+        })))
+        ## We don't have a link for the object in view mode so we make the edit link less visible.
+        #set ($active = true)
+      #end
+      ## Avoid whitespace characters between the list items (they are visible when display=inline-block).
+      #set ($closingTag = '</li><li')
+      #if ($foreach.index == $mathtool.sub($path.size(), 1))
+        #set ($active = $active || !$options.excludeSelf)
+        #set ($closingTag = '')
+      #end
+      class="$reference.type.toString().toLowerCase()#if ($active) active#end"><a href="$url">$label</a>$closingTag##
+    #end##
+  </li></ol>
+#end
+
+#*
+ * Display the parents of a document based on the old parent/child mechanism.
+ *#
+#macro (hierarchy_parentChild)
+  #if ("$!doc.parent" !=  '' || $xcontext.action == 'edit' || $xcontext.action == 'inline')
+    #set ($path = [])
+    #set ($discard = $path.addAll($services.parentchild.getParentsBasedOnParentChildRelationship($doc.documentReference)))
+    #set ($discard = $path.add($doc.documentReference))
+    #set ($options = {
+      'id': 'hierarchy',
+      'entities': {
+        $doc.documentReference: $tdoc
+      }
+    })
+    #displayHierarchyPath($path $options)
+  #end
+#end

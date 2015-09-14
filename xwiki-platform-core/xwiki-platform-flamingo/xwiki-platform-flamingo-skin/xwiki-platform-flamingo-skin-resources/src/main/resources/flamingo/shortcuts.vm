@@ -5,6 +5,13 @@
 ##
 #if (!$docextralinks && !$docextras)
   #set($docextralinks = [])
+  ## Children
+  #if ($doc.name == 'WebHome')
+    #set ($discard = $docextralinks.add(['children', $services.localization.render('docextra.children'), -1, 'folder-open']))
+  #else
+    ## Terminal document
+    #set ($discard = $docextralinks.add(['siblings', $services.localization.render('docextra.siblings'), -1, 'folder-open']))
+  #end
   #if($xcontext.action == 'view' && $viewer != 'content')
     #set ($discard = $docextralinks.add(['content', $services.localization.render('core.links.content'), -1, 'file']))
   #end
@@ -31,10 +38,6 @@
   #end
 #end
 
-#if($xcontext.action == 'view' && $viewer != 'content')
-  <div class="text-right">
-  #xwikibuttonentrystart('' $services.localization.render('core.menu.moreactions') 'tmMoreActions' 'btn-default' 'cog')
-#end
 #foreach($docextralink in $docextralinks)
   #set ($extraAnchor = $docextralink.get(0))
   #set ($extraText = $docextralink.get(1))
@@ -48,7 +51,16 @@
   #end
   #submenuitem($doc.getURL('view', "viewer=$!{escapetool.url(${extraAnchor})}"), ${escapetool.xml(${extraText})}, '', '', $glyphIcon)
 #end
-#if($xcontext.action == 'view' && $viewer != 'content')
-  #xwikibuttonentryend()
-  </div>
+
+###########################################
+##        ADD KEYBOARD SHORTCUTS
+###########################################
+#if ($keyboardShortcutsEnabled)
+  <script type="text/javascript">
+  //<![CDATA[
+    shortcut.add("$services.localization.render('core.shortcuts.view.code')", function() {
+      location.href = $('tmViewSource').href;
+    }, {'type': 'keypress', 'propagate': false, 'disable_in_input': true });
+  //]]>
+  </script>
 #end

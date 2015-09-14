@@ -27,6 +27,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.ui.ExpectedCondition;
+import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.model.reference.EntityReference;
 import org.xwiki.test.ui.po.editor.WYSIWYGEditPage;
 
 /**
@@ -41,7 +43,9 @@ public class ViewPage extends BasePage
     private WebElement content;
 
     @FindBy(id = "hierarchy")
-    private WebElement breadcrumb;
+    private WebElement breadcrumbElement;
+
+    private BreadcrumbElement breadcrumb;
 
     /**
      * Opens the comments tab.
@@ -74,8 +78,8 @@ public class ViewPage extends BasePage
     {
         List<WebElement> messages = getDriver().findElementsWithoutWaiting(By.className("xwikimessage"));
         for (WebElement message : messages) {
-            if (message.getText().contains("The requested document could not be found.")
-                || message.getText().contains("The document has been deleted.")) {
+            if (message.getText().contains("The requested page could not be found.")
+                || message.getText().contains("The page has been deleted.")) {
                 return false;
             }
         }
@@ -107,8 +111,18 @@ public class ViewPage extends BasePage
      */
     public void clickWantedLink(String spaceName, String pageName, boolean waitForTemplateDisplay)
     {
+        clickWantedLink(new DocumentReference("xwiki", spaceName, pageName), waitForTemplateDisplay);
+    }
+
+    /**
+     * Clicks on a wanted link in the page.
+     *
+     * @since 7.2M2
+     */
+    public void clickWantedLink(EntityReference reference, boolean waitForTemplateDisplay)
+    {
         WebElement brokenLink = getDriver().findElement(
-            By.xpath("//span[@class='wikicreatelink']/a[contains(@href,'/create/" + spaceName + "/" + pageName
+            By.xpath("//span[@class='wikicreatelink']/a[contains(@href,'/create/" + getUtil().getURLFragment(reference)
                 + "')]"));
         brokenLink.click();
         if (waitForTemplateDisplay) {
@@ -119,34 +133,27 @@ public class ViewPage extends BasePage
         }
     }
 
+    public BreadcrumbElement getBreadcrumb()
+    {
+        if (this.breadcrumb == null) {
+            this.breadcrumb = new BreadcrumbElement(this.breadcrumbElement);
+        }
+        return this.breadcrumb;
+    }
+
     public String getBreadcrumbContent()
     {
-        return this.breadcrumb.getText();
+        return getBreadcrumb().getPathAsString();
     }
 
     public boolean hasBreadcrumbContent(String breadcrumbItem, boolean isCurrent)
     {
-     return hasBreadcrumbContent(breadcrumbItem, isCurrent, true);
+        return hasBreadcrumbContent(breadcrumbItem, isCurrent, true);
     }
 
     public boolean hasBreadcrumbContent(String breadcrumbItem, boolean isCurrent, boolean withLink)
     {
-        List<WebElement> result;
-        if (isCurrent) {
-            result = getDriver().findElementsWithoutWaiting(this.breadcrumb,
-                By.xpath("li[@class = 'active' and text() ='" + breadcrumbItem + "']"));
-        } else {
-            if (withLink) {
-                result = getDriver().findElementsWithoutWaiting(this.breadcrumb,
-                        By.xpath("//a[text() = '" + breadcrumbItem + "']"));
-            } else {
-                // if the user has not the right to see the parent, there is no link to the parent, only a <li> with the
-                // name of the document
-                result = getDriver().findElementsWithoutWaiting(this.breadcrumb,
-                        By.xpath("//li[text() = '" + breadcrumbItem + "']"));
-            }
-        }
-        return result.size() > 0;
+        return getBreadcrumb().hasPathElement(breadcrumbItem, isCurrent, withLink);
     }
 
     /**
@@ -157,7 +164,8 @@ public class ViewPage extends BasePage
      */
     public ViewPage clickBreadcrumbLink(String linkText)
     {
-        this.breadcrumb.findElement(By.linkText(linkText)).click();
+        getBreadcrumb().clickPathElement(linkText);
+
         return new ViewPage();
     }
 

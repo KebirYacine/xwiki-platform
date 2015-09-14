@@ -25,6 +25,7 @@ import java.lang.reflect.Type;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1294,7 +1295,7 @@ public privileged aspect XWikiCompatibilityAspect
      *             instead
      */
     @Deprecated
-    public Object getRenderingEngine()
+    public Object XWiki.getRenderingEngine()
     {
         try {
             return Utils.getComponent(getClass().forName("com.xpn.xwiki.render.XWikiRenderingEngine"));
@@ -1307,5 +1308,32 @@ public privileged aspect XWikiCompatibilityAspect
     public void XWiki.resetRenderingEngine(XWikiContext context) throws XWikiException
     {
         getOldRendering().resetRenderingEngine(context);
+    }
+
+    /**
+     * @deprecated use {@link EntityReferenceResolver} instead
+     */
+    @Deprecated
+    public String XWiki.getDocName(String fullName)
+    {
+        return fullName.substring(fullName.indexOf('.') + 1);
+    }
+
+    /**
+     * @deprecated use {@link Date#Date()} instead...
+     */
+    @Deprecated
+    public Date XWiki.getCurrentDate()
+    {
+        return new Date();
+    }
+
+    /**
+     * @deprecated use {@link Date#Date(long)} instead...
+     */
+    @Deprecated
+    public Date XWiki.getDate(long time)
+    {
+        return new Date(time);
     }
 }

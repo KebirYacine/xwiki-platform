@@ -60,6 +60,11 @@ import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedCondition;
+import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.model.EntityType;
+import org.xwiki.model.reference.EntityReference;
+import org.xwiki.model.reference.EntityReferenceResolver;
+import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.rest.model.jaxb.ObjectFactory;
 import org.xwiki.rest.model.jaxb.Xwiki;
 import org.xwiki.test.integration.XWikiExecutor;
@@ -103,6 +108,12 @@ public class TestUtils
     public static final String BASE_REST_URL = BASE_URL + "rest/";
 
     private static PersistentTestContext context;
+
+    private static ComponentManager componentManager;
+
+    private static EntityReferenceResolver<String> referenceResolver;
+
+    private static EntityReferenceSerializer<String> referenceSerializer;
 
     /**
      * Used to convert Java object into its REST XML representation.
@@ -151,6 +162,13 @@ public class TestUtils
     public static void setContext(PersistentTestContext context)
     {
         TestUtils.context = context;
+    }
+
+    public static void initializeComponent(ComponentManager componentManager) throws Exception
+    {
+        TestUtils.componentManager = componentManager;
+        TestUtils.referenceResolver = TestUtils.componentManager.getInstance(EntityReferenceResolver.TYPE_STRING);
+        TestUtils.referenceSerializer = TestUtils.componentManager.getInstance(EntityReferenceSerializer.TYPE_STRING);
     }
 
     protected XWikiWebDriver getDriver()
@@ -336,12 +354,17 @@ public class TestUtils
 
     public String getLoggedInUserName()
     {
-        String loggedInUserName = null;
-        List<WebElement> elements = getDriver().findElementsWithoutWaiting(By.xpath("(//.[@id='tmUser']//a)[1]"));
-        if (!elements.isEmpty()) {
-            String href = elements.get(0).getAttribute("href");
-            loggedInUserName = href.substring(href.lastIndexOf("/") + 1);
+        By userAvatar = By.xpath("//div[@id='xwikimainmenu']//li[contains(@class, 'navbar-avatar')]/a");
+        if (!getDriver().hasElementWithoutWaiting(userAvatar)) {
+            // Guest
+            return null;
         }
+        
+        WebElement element = getDriver().findElementWithoutWaiting(userAvatar);
+        String href = element.getAttribute("href");
+        String loggedInUserName = href.substring(href.lastIndexOf("/") + 1);
+        
+        // Return
         return loggedInUserName;
     }
 
@@ -381,9 +404,26 @@ public class TestUtils
         return new ViewPage();
     }
 
+    /**
+     * @since 7.2M2
+     */
+    public ViewPage gotoPage(EntityReference reference)
+    {
+        gotoPage(reference, "view");
+        return new ViewPage();
+    }
+
     public void gotoPage(String space, String page, String action)
     {
         gotoPage(space, page, action, "");
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public void gotoPage(EntityReference reference, String action)
+    {
+        gotoPage(reference, action, "");
     }
 
     /**
@@ -407,6 +447,14 @@ public class TestUtils
         gotoPage(spaces, page, action, toQueryString(queryParameters));
     }
 
+    /**
+     * @since 7.2M2
+     */
+    public void gotoPage(EntityReference reference, String action, Map<String, ?> queryParameters)
+    {
+        gotoPage(reference, action, toQueryString(queryParameters));
+    }
+
     public void gotoPage(String space, String page, String action, String queryString)
     {
         gotoPage(Collections.singletonList(space), page, action, queryString);
@@ -420,6 +468,14 @@ public class TestUtils
         gotoPage(getURL(spaces, page, action, queryString));
     }
 
+    /**
+     * @since 7.2M2
+     */
+    public void gotoPage(EntityReference reference, String action, String queryString)
+    {
+        gotoPage(getURL(reference, action, queryString));
+    }
+
     public void gotoPage(String url)
     {
         // Only navigate if the current URL is different from the one to go to, in order to improve performances.
@@ -431,6 +487,14 @@ public class TestUtils
     public String getURLToDeletePage(String space, String page)
     {
         return getURL(space, page, "delete", "confirm=1");
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public String getURLToDeletePage(EntityReference reference)
+    {
+        return getURL(reference, "delete", "confirm=1");
     }
 
     /**
@@ -451,6 +515,14 @@ public class TestUtils
     /**
      * @since 7.2M2
      */
+    public ViewPage createPage(EntityReference reference, String content, String title)
+    {
+        return createPage(reference, content, title, null);
+    }
+
+    /**
+     * @since 7.2M2
+     */
     public ViewPage createPage(List<String> spaces, String page, String content, String title)
     {
         return createPage(spaces, page, content, title, null);
@@ -459,6 +531,14 @@ public class TestUtils
     public ViewPage createPage(String space, String page, String content, String title, String syntaxId)
     {
         return createPage(Collections.singletonList(space), page, content, title, syntaxId);
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public ViewPage createPage(EntityReference reference, String content, String title, String syntaxId)
+    {
+        return createPage(reference, content, title, syntaxId, null);
     }
 
     /**
@@ -495,6 +575,29 @@ public class TestUtils
             queryMap.put("parent", parentFullPageName);
         }
         gotoPage(spaces, page, "save", queryMap);
+        return new ViewPage();
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public ViewPage createPage(EntityReference reference, String content, String title, String syntaxId,
+        String parentFullPageName)
+    {
+        Map<String, String> queryMap = new HashMap<>();
+        if (content != null) {
+            queryMap.put("content", content);
+        }
+        if (title != null) {
+            queryMap.put("title", title);
+        }
+        if (syntaxId != null) {
+            queryMap.put("syntaxId", syntaxId);
+        }
+        if (parentFullPageName != null) {
+            queryMap.put("parent", parentFullPageName);
+        }
+        gotoPage(reference, "save", queryMap);
         return new ViewPage();
     }
 
@@ -554,6 +657,38 @@ public class TestUtils
     public void deletePage(String space, String page)
     {
         getDriver().get(getURLToDeletePage(space, page));
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public void deletePage(EntityReference reference)
+    {
+        getDriver().get(getURLToDeletePage(reference));
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public EntityReference resolveDocumentReference(String referenceAsString)
+    {
+        return referenceResolver.resolve(referenceAsString, EntityType.DOCUMENT);
+    }
+
+    /**
+     * @since 7.2M3
+     */
+    public EntityReference resolveSpaceReference(String referenceAsString)
+    {
+        return referenceResolver.resolve(referenceAsString, EntityType.SPACE);
+    }
+
+    /**
+     * @since 7.2RC1
+     */
+    public String serializeReference(EntityReference reference)
+    {
+        return referenceSerializer.serialize(reference);
     }
 
     /**
@@ -632,6 +767,38 @@ public class TestUtils
         List<String> path = new ArrayList<>(spaces);
         path.add(page);
         return getURL(action, path.toArray(new String[] {}), queryString);
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public String getURL(EntityReference reference, String action, String queryString)
+    {
+        return getURL(action, extractListFromReference(reference).toArray(new String[]{}), queryString);
+    }
+
+    /**
+     * @since 7.2M2
+     */
+    public String getURLFragment(EntityReference reference)
+    {
+        return StringUtils.join(extractListFromReference(reference), "/");
+    }
+
+    private List<String> extractListFromReference(EntityReference reference)
+    {
+        List<String> path = new ArrayList<>();
+        // Add the spaces
+        EntityReference spaceReference = reference.extractReference(EntityType.SPACE);
+        EntityReference wikiReference = reference.extractReference(EntityType.WIKI);
+        for (EntityReference singleReference : spaceReference.removeParent(wikiReference).getReversedReferenceChain())
+        {
+            path.add(singleReference.getName());
+        }
+        if (reference.getType() == EntityType.DOCUMENT) {
+            path.add(reference.getName());
+        }
+        return path;
     }
 
     /**
@@ -824,7 +991,7 @@ public class TestUtils
 
     public boolean isInViewMode()
     {
-        return getDriver().findElements(By.id("tmEdit")).size() > 0;
+        return !getDriver().hasElementWithoutWaiting(By.id("editMeta"));
     }
 
     public boolean isInSourceViewMode()
@@ -868,6 +1035,8 @@ public class TestUtils
     {
         return getDriver().getCurrentUrl().contains("/create/");
     }
+    
+    public boolean isInAdminMode() { return getDriver().getCurrentUrl().contains("/admin/"); }
 
     /**
      * Forces the current user to be the Guest user by clearing all coookies.
@@ -880,6 +1049,14 @@ public class TestUtils
     public void addObject(String space, String page, String className, Object... properties)
     {
         gotoPage(space, page, "objectadd", toQueryParameters(className, null, properties));
+    }
+
+    /**
+     * @since 7.2RC1
+     */
+    public void addObject(EntityReference reference, String className, Object... properties)
+    {
+        gotoPage(reference, "objectadd", toQueryParameters(className, null, properties));
     }
 
     public void addObject(String space, String page, String className, Map<String, ?> properties)

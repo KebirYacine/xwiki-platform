@@ -57,6 +57,12 @@ public class DocumentTreeElement extends TreeElement
         return (DocumentTreeElement) super.openTo(nodeId);
     }
 
+    @Override
+    public DocumentTreeElement clearSelection()
+    {
+        return (DocumentTreeElement) super.clearSelection();
+    }
+
     /**
      * Opens the tree to the specified space.
      * 

@@ -21,12 +21,14 @@ package org.xwiki.rest.internal;
 
 import java.net.URI;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
 import org.suigeneris.jrcs.rcs.Version;
+import org.xwiki.logging.event.LogEvent;
 import org.xwiki.rest.Relations;
 import org.xwiki.rest.XWikiRestException;
 import org.xwiki.rest.model.jaxb.Attachment;
@@ -34,6 +36,9 @@ import org.xwiki.rest.model.jaxb.Attribute;
 import org.xwiki.rest.model.jaxb.Class;
 import org.xwiki.rest.model.jaxb.Comment;
 import org.xwiki.rest.model.jaxb.HistorySummary;
+import org.xwiki.rest.model.jaxb.JobLog;
+import org.xwiki.rest.model.jaxb.JobProgress;
+import org.xwiki.rest.model.jaxb.JobStatus;
 import org.xwiki.rest.model.jaxb.Link;
 import org.xwiki.rest.model.jaxb.Object;
 import org.xwiki.rest.model.jaxb.ObjectFactory;
@@ -394,7 +399,7 @@ public class DomainObjectFactory
 
         return pageSummary;
     }
-
+    
     public static Page createPage(ObjectFactory objectFactory, URI baseUri, URI self, Document doc, boolean useVersion,
         XWiki xwikiApi, Boolean withPrettyNames) throws XWikiException
     {
@@ -748,6 +753,61 @@ public class DomainObjectFactory
         object.getLinks().add(objectLink);
 
         return object;
+    }
+
+    public static JobStatus createJobStatus(ObjectFactory objectFactory, URI self, 
+            org.xwiki.job.event.status.JobStatus jobStatus)
+    {
+        JobStatus status = objectFactory.createJobStatus();
+        status.setId(StringUtils.join(jobStatus.getRequest().getId(), "/"));
+        status.setState(jobStatus.getState().name());
+        status.setProgress(createJobProgress(objectFactory, jobStatus.getProgress()));
+        Calendar calendarStartDate = Calendar.getInstance();
+        calendarStartDate.setTime(jobStatus.getStartDate());
+        status.setStartDate(calendarStartDate);
+        if (jobStatus.getEndDate() != null) {
+            Calendar calendarEndDate = Calendar.getInstance();
+            calendarEndDate.setTime(jobStatus.getEndDate());
+            status.setEndDate(calendarEndDate);
+        }
+        if (self != null) {
+            Link link = objectFactory.createLink();
+            link.setHref(self.toString());
+            link.setRel(Relations.SELF);
+            status.getLinks().add(link);
+        }
+        
+        return status;
+    }
+
+    public static JobProgress createJobProgress(ObjectFactory objectFactory, 
+            org.xwiki.job.event.status.JobProgress jobProgress)
+    {
+        JobProgress progress = objectFactory.createJobProgress();
+        progress.setOffset(jobProgress.getOffset());
+        progress.setCurrentLevelOffset(jobProgress.getCurrentLevelOffset());
+        return progress;
+    }
+    
+    public static JobLog createLog(ObjectFactory objectFactory, URI self, Collection<LogEvent> logs)
+    {
+        JobLog log = objectFactory.createJobLog();
+        for (LogEvent logEvent : logs) {
+            org.xwiki.rest.model.jaxb.LogEvent event = objectFactory.createLogEvent();
+            event.setLevel(logEvent.getLevel().name());
+            Calendar calendarDate = Calendar.getInstance();
+            calendarDate.setTimeInMillis(logEvent.getTimeStamp());
+            event.setDate(calendarDate);
+            event.setFormattedMessage(logEvent.getFormattedMessage());
+            log.getLogEvents().add(event);
+        }
+        if (self != null) {
+            Link link = objectFactory.createLink();
+            link.setHref(self.toString());
+            link.setRel(Relations.SELF);
+            log.getLinks().add(link);
+        }
+        return log;
     }
 
     private static Link getObjectLink(ObjectFactory objectFactory, URI baseUri, Document doc, BaseObject xwikiObject,

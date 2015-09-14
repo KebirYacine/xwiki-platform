@@ -19,6 +19,8 @@
  */
 package org.xwiki.search.solr.internal.reference;
 
+import java.lang.reflect.Type;
+
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -27,6 +29,7 @@ import org.apache.commons.lang.LocaleUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.solr.common.SolrDocument;
 import org.xwiki.component.annotation.Component;
+import org.xwiki.component.util.DefaultParameterizedType;
 import org.xwiki.model.EntityType;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReference;
@@ -43,6 +46,12 @@ import org.xwiki.search.solr.internal.api.FieldUtils;
 @Singleton
 public class SolrEntityReferenceResolver implements EntityReferenceResolver<SolrDocument>
 {
+    /**
+     * Helper for unit tests.
+     */
+    public static final Type TYPE = new DefaultParameterizedType(null, EntityReferenceResolver.class,
+        SolrDocument.class);
+
     @Inject
     @Named("explicit")
     private EntityReferenceResolver<EntityReference> explicitReferenceEntityReferenceResolver;
@@ -63,8 +72,11 @@ public class SolrEntityReferenceResolver implements EntityReferenceResolver<Solr
         EntityReference spaceReference = getSpaceReference(solrDocument, wikiReference);
         EntityReference documentReference = getDocumentReferenceWithLocale(solrDocument, spaceReference);
 
-        EntityType entityType = EntityType.valueOf((String) solrDocument.get(FieldUtils.TYPE));
-        switch (entityType) {
+        String indexedEntityType = (String) solrDocument.get(FieldUtils.TYPE);
+        EntityType actualEntityType =
+            StringUtils.isEmpty(indexedEntityType) ? expectedEntityType : EntityType.valueOf(indexedEntityType);
+
+        switch (actualEntityType) {
             case ATTACHMENT:
                 return getAttachmentReference(solrDocument, documentReference);
             case OBJECT:
@@ -115,12 +127,13 @@ public class SolrEntityReferenceResolver implements EntityReferenceResolver<Solr
 
     private EntityReference getAttachmentReference(SolrDocument solrDocument, EntityReference parent)
     {
-        return new EntityReference((String) solrDocument.get(FieldUtils.FILENAME), EntityType.ATTACHMENT, parent);
+        return new EntityReference((String) solrDocument.getFirstValue(FieldUtils.FILENAME),
+            EntityType.ATTACHMENT, parent);
     }
 
     private EntityReference getObjectReference(SolrDocument solrDocument, EntityReference parent)
     {
-        String classReference = (String) solrDocument.get(FieldUtils.CLASS);
+        String classReference = (String) solrDocument.getFirstValue(FieldUtils.CLASS);
         Integer objectNumber = (Integer) solrDocument.get(FieldUtils.NUMBER);
         return new EntityReference(String.format("%s[%s]", classReference, objectNumber), EntityType.OBJECT, parent);
     }

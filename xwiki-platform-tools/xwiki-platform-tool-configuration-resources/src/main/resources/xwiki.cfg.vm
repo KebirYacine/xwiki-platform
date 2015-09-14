@@ -352,6 +352,10 @@ xwiki.authentication.logoutpage=(/|/[^/]+/|/wiki/[^/]+/)logout/*
 #-# HTTP status code to sent when the authentication failed.
 xwiki.authentication.unauthorized_code=200
 
+#-# Used by some authenticators (like com.xpn.xwiki.user.impl.xwiki.AppServerTrustedAuthServiceImpl)
+#-# to indicate that the users should be created. In this kind of authenticator the user are not created by default.
+#-# Must be set to "empty".
+# xwiki.authentication.createuser=empty
 
 #---------------------------------------
 # XWiki Syntax 1.0 Rendering Engine
@@ -497,6 +501,16 @@ xwiki.authentication.ldap.update_user=1
 #-# - always: synchronize on every login
 #-# The default is always
 # xwiki.authentication.ldap.mode_group_sync=always
+
+#-# [Since 7.2M3, XWikiLDAPAuthServiceImpl]
+#-# Indicate groups members should be resolved in case they are subgroups.
+#-# Doing so can be very expensive so it should be disabled if you know there is no subgroups
+#-# (or if you don't care about them).
+#-# If the group is actually a filter it will always be resolved since it does not make sense left alone.
+#-# - 0: disable
+#-# - 1: enable
+#-# The default is 1
+# xwiki.authentication.ldap.group_sync_resolve_subgroups=0
 
 #-# [Since 1.3M2, XWikiLDAPAuthServiceImpl]
 #-# If ldap authentication fails for any reason, try XWiki DB authentication with the same credentials
